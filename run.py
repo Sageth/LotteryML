@@ -9,6 +9,7 @@ data = pd.read_csv("nj-pick6-lottery.csv")
 mean_allowance = 0.05
 accuracy_allowance = 0.43
 
+
 def predict_and_check():
     # Calculate the median sum of winning numbers based on the data
     median_sum = data.iloc[:, 2:].sum(axis=1).median()
@@ -20,22 +21,22 @@ def predict_and_check():
     # Train a separate model for each ball
     for ball in range(1, 7):
         # Split data into X and y
-        X = data.drop(["Date", f"Ball{ball}"], axis=1)
+        x = data.drop(["Date", f"Ball{ball}"], axis=1)
         y = data[f"Ball{ball}"]
 
         # Split data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.5)
 
         # Train the model
         model = LinearRegression()
-        model.fit(X_train, y_train)
+        model.fit(x_train, y_train)
 
         # Test the model and calculate accuracy
-        accuracy = model.score(X_test, y_test)
+        accuracy = model.score(x_test, y_test)
         accuracies.append(accuracy)
 
         # Make predictions
-        predictions = model.predict(X_test)
+        predictions = model.predict(x_test)
 
         # Append the predicted values to the list
         predictions_list.append(predictions)
@@ -52,12 +53,12 @@ def predict_and_check():
         # If duplicates exist, retrain the models for all balls and update the mode values
         predictions_list = []
         for ball in range(1, 7):
-            X = data.drop(f"Ball{ball}", axis=1)
+            x = data.drop(f"Ball{ball}", axis=1)
             y = data[f"Ball{ball}"]
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
+            x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.5)
             model = LinearRegression()
-            model.fit(X_train, y_train)
-            predictions = model.predict(X_test)
+            model.fit(x_train, y_train)
+            predictions = model.predict(x_test)
             predictions_list.append(predictions)
         predictions_df = pd.DataFrame(predictions_list).transpose()
         mode_values = predictions_df.mode(axis=1)
@@ -71,12 +72,12 @@ def predict_and_check():
             for duplicate_value in duplicate_values:
                 duplicate_indices = np.where(ball_mode_values == duplicate_value)[0]
                 for index in duplicate_indices:
-                    X = data.drop(f"Ball{ball}", axis=1)
+                    x = data.drop(f"Ball{ball}", axis=1)
                     y = data[f"Ball{ball}"]
-                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
+                    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.5)
                     model = LinearRegression()
-                    model.fit(X_train, y_train)
-                    predictions = model.predict(X_test)
+                    model.fit(x_train, y_train)
+                    predictions = model.predict(x_test)
                     ball_mode_values[index] = predictions[0]
 
             mode_values.loc[ball - 1, :] = ball_mode_values
@@ -89,12 +90,12 @@ def predict_and_check():
         for duplicate_final_value in duplicate_final_values:
             duplicate_final_indices = np.where(final_mode_values == duplicate_final_value)[0]
             for index in duplicate_final_indices:
-                X = data.drop("Ball6", axis=1)
+                x = data.drop("Ball6", axis=1)
                 y = data["Ball6"]
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
+                x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.5)
                 model = LinearRegression()
-                model.fit(X_train, y_train)
-                predictions = model.predict(X_test)
+                model.fit(x_train, y_train)
+                predictions = model.predict(x_test)
                 final_mode_values[index] = predictions[0]
 
         mode_values.iloc[-1, :] = final_mode_values
@@ -104,8 +105,8 @@ def predict_and_check():
     # Print the mode values and accuracy for each ball
     all_above_threshold = True
     for ball in range(1, 7):
-        mode_value = mode_values[ball-1][0]
-        accuracy = accuracies[ball-1]
+        mode_value = mode_values[ball - 1][0]
+        accuracy = accuracies[ball - 1]
         print(f"Ball{ball} prediction: {mode_value:.0f}\tAccuracy: {accuracy * 100:.2f}%")
 
         if accuracy < accuracy_allowance:
@@ -125,6 +126,7 @@ def predict_and_check():
         print(f"The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the median sum "
               f"or all balls do not have accuracy above {accuracy_allowance * 100}%.")
         predict_and_check()  # Call the function recursively
+
 
 # Start the prediction and checking process
 predict_and_check()

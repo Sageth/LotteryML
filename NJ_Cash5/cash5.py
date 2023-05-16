@@ -6,9 +6,9 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 
 # Load data
-data = pd.read_csv("./nj-pick6.csv")
-mean_allowance = 0.045
-accuracy_allowance = 0.43
+data = pd.read_csv("./nj-cash5.csv")
+mean_allowance = 0.45
+accuracy_allowance = 0.42
 test_size = 0.5
 
 
@@ -21,7 +21,7 @@ def predict_and_check():
     accuracies = []
 
     # Train a separate model for each ball
-    for ball in range(1, 7):
+    for ball in range(1, 6):
         # Split data into X and y
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
         y = data[f"Ball{ball}"]
@@ -54,7 +54,7 @@ def predict_and_check():
     while len(final_mode_values) != len(np.unique(final_mode_values)):
         # If duplicates exist, retrain the models for all balls and update the mode values
         predictions_list = []
-        for ball in range(1, 7):
+        for ball in range(1, 6):
             x = data.drop(f"Ball{ball}", axis=1)
             y = data[f"Ball{ball}"]
             x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
@@ -66,7 +66,7 @@ def predict_and_check():
         mode_values = predictions_df.mode(axis=1)
 
         # Ensure uniqueness for each ball
-        for ball in range(1, 7):
+        for ball in range(1, 6):
             ball_mode_values = mode_values.loc[ball - 1, :].values
             unique_values, counts = np.unique(ball_mode_values, return_counts=True)
             duplicate_values = unique_values[counts > 1]
@@ -106,7 +106,7 @@ def predict_and_check():
 
     # Print the mode values and accuracy for each ball
     all_above_threshold = True
-    for ball in range(1, 7):
+    for ball in range(1, 6):
         mode_value = mode_values[ball - 1][0]
         accuracy = accuracies[ball - 1]
         print(f"Ball{ball} prediction: {mode_value:.0f}\tAccuracy: {accuracy * 100:.2f}%")

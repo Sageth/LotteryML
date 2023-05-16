@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 from datetime import datetime
 
 # Load data
-data = pd.read_csv("nj-pick6-lottery.csv")
+data = pd.read_csv("./nj-pick6.csv")
 mean_allowance = 0.05
 accuracy_allowance = 0.43
 

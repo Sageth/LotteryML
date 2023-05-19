@@ -51,9 +51,6 @@ def predict_and_check():
     # Calculate the mode of the sums
     mode_sum = calculate_mode_of_sums()
 
-    # Print the mode sum
-    print(f"Mode sum: {mode_sum}")
-
     # Create an empty list to store the predicted values for each ball
     predictions_list = []
     accuracies = []
@@ -114,17 +111,18 @@ def predict_and_check():
     # Calculate the sum of the final ball predictions for balls 1 through 6
     predicted_sum = final_mode_values.sum()
 
-    # Print the sum of the final ball predictions
+    print(f"")
+    print(f"Mode sum: {mode_sum}")
     print(f"Sum of predicted values: {predicted_sum}")
 
     # Check if the sum of the predicted winning numbers is within 5% of the mode sum
     if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum and all_above_threshold:
-        print(f"The sum of the predicted winning numbers is within {mean_allowance * 100}% of the mode sum.")
-        print(f"Mode sum: {mode_sum}")
+        print(f"SUCCESS: The sum of the predicted winning numbers is within {mean_allowance * 100}% of the mode sum "
+              f"and all balls meet the accuracy threshold of {all_above_threshold}%")
         print(f"The current date and time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     else:
-        print(f"The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the mode sum "
-              f"or all balls do not have accuracy above {accuracy_allowance * 100}%.")
+        print(f"FAILURE:The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the mode "
+              f"sum or all balls do not have accuracy above {accuracy_allowance * 100}%.")
         predict_and_check()  # Call the function recursively
 
 

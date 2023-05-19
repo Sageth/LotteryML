@@ -84,6 +84,10 @@ def predict_and_check():
         # Append the predicted values to the list
         predictions_list.append(predictions)
 
+        # Check if accuracy is below the threshold
+        if accuracy < accuracy_allowance:
+            all_above_threshold = False
+
     # Convert the predictions list to a Pandas DataFrame
     predictions_df = pd.DataFrame(predictions_list).transpose()
 
@@ -100,11 +104,12 @@ def predict_and_check():
     final_mode_values = mode_values.iloc[-1, :].values
     final_mode_values = handle_duplicates(final_mode_values, 6)
 
-    # Print the predicted values for each ball
+    # Print the predicted values and accuracy for each ball
     print("Predicted values:")
     for ball in range(1, 7):
         rounded_value = round(final_mode_values[ball - 1])
-        print(f"Ball{ball}: {rounded_value}")
+        accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
+        print(f"Ball{ball}: {rounded_value}\tAccuracy: {accuracy_percentage}%")
 
     # Calculate the sum of the final ball predictions for balls 1 through 6
     predicted_sum = final_mode_values.sum()

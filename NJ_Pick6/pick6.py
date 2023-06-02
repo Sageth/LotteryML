@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 data = pd.read_csv("./nj-pick6.csv")
 mean_allowance = 0.045
 accuracy_allowance = 0.43
-test_size = 0.5
+test_size = 0.3
 
 
 def calculate_mode_of_sums():
@@ -118,7 +118,7 @@ def predict_and_check():
     # Check if the sum of the predicted winning numbers is within 5% of the mode sum
     if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum and all_above_threshold:
         print(f"SUCCESS: The sum of the predicted winning numbers is within {mean_allowance * 100}% of the mode sum "
-              f"and all balls meet the accuracy threshold of {all_above_threshold}%")
+              f"and all balls meet the accuracy threshold of {accuracy_allowance * 100}%")
         print(f"The current date and time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     else:
         print(f"FAILURE:The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the mode "

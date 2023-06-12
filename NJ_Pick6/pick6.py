@@ -1,3 +1,4 @@
+import glob
 from datetime import datetime
 
 import numpy as np
@@ -5,11 +6,13 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 
-# Load data
-data = pd.read_csv("./nj-pick6.csv")
-mean_allowance = 0.045
+# Load data. While this will concatenate files, I suggest having only one.
+csv_files = glob.glob("./*.csv")
+data = pd.concat([pd.read_csv(file) for file in csv_files])
+
+mean_allowance = 0.03
 accuracy_allowance = 0.43
-test_size = 0.3
+test_size = 0.1
 
 
 def calculate_mode_of_sums():
@@ -48,6 +51,16 @@ def handle_duplicates(ball_mode_values, ball):
 def predict_and_check():
     print("-----------------------")
 
+    # Get the current date
+    current_date = datetime.now().strftime('%Y-%m-%d')
+
+    # Filter data for dates after the current date
+    filtered_data = data[data["Date"] < current_date]
+
+    if filtered_data.empty:
+        print("No future data available for prediction.")
+        return
+
     # Calculate the mode of the sums
     mode_sum = calculate_mode_of_sums()
 
@@ -61,8 +74,12 @@ def predict_and_check():
     # Train a separate model for each ball
     for ball in range(1, 7):
         # Split data into X and y
-        x = data.drop(["Date", f"Ball{ball}"], axis=1)
-        y = data[f"Ball{ball}"]
+        x = filtered_data.drop(["Date", f"Ball{ball}"], axis=1)
+        y = filtered_data[f"Ball{ball}"]
+
+        if len(x) < 2:
+            print(f"Not enough data available for Ball{ball} prediction.")
+            return
 
         # Split data into training and testing sets
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)

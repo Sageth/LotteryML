@@ -11,8 +11,8 @@ csv_files = glob.glob("./*.csv")
 data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 mean_allowance = 0.03
-accuracy_allowance = 0.43
-test_size = 0.3
+accuracy_allowance = 0.47
+test_size = 0.01
 
 
 def calculate_mode_of_sums():
@@ -110,12 +110,20 @@ def predict_and_check():
 
     # Ensure uniqueness for each ball
     for ball in range(1, 6):
-        ball_mode_values = mode_values.loc[ball - 1, :].values
+        if ball not in mode_values.index:
+            print(f"Not enough data available for Ball{ball} prediction.")
+            return
+
+        ball_mode_values = mode_values.loc[ball, :].values
         ball_mode_values = handle_duplicates(ball_mode_values, ball)
-        mode_values.loc[ball - 1, :] = ball_mode_values
+        mode_values.loc[ball, :] = ball_mode_values
 
     # Ensure uniqueness for the final ball prediction
-    final_mode_values = mode_values.iloc[-1, :].values
+    if 6 not in mode_values.index:
+        print("Not enough data available for the final ball prediction.")
+        return
+
+    final_mode_values = mode_values.loc[6, :].values
     final_mode_values = handle_duplicates(final_mode_values, 6)
 
     # Print the predicted values and accuracy for each ball
@@ -138,10 +146,11 @@ def predict_and_check():
               f"and all balls meet the accuracy threshold of {accuracy_allowance * 100}%")
         print(f"The current date and time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     else:
-        print(f"FAILURE:The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the mode "
+        print(f"FAILURE: The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the mode "
               f"sum or all balls do not have accuracy above {accuracy_allowance * 100}%.")
         predict_and_check()  # Call the function recursively
 
 
 # Start the prediction and checking process
 predict_and_check()
+

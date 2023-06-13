@@ -11,7 +11,7 @@ csv_files = glob.glob("./*.csv")
 data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 mean_allowance = 0.03
-accuracy_allowance = 0.47
+accuracy_allowance = 0.50
 test_size = 0.01
 
 

@@ -1,10 +1,14 @@
 import glob
 from datetime import datetime
+from functools import lru_cache
 
+import sys
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
+
+sys.setrecursionlimit(10000)
 
 # Load data. While this will concatenate files, I suggest having only one.
 csv_files = glob.glob("./*.csv")
@@ -48,6 +52,7 @@ def handle_duplicates(ball_mode_values, ball):
     return ball_mode_values
 
 
+@lru_cache(128)
 def predict_and_check():
     print("-----------------------")
 

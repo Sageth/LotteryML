@@ -11,8 +11,8 @@ csv_files = glob.glob("./*.csv")
 data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 mean_allowance = 0.02
-accuracy_allowance = 0.55
-test_size = 0.01
+accuracy_allowance = 0.60
+test_size = 0.0015
 
 
 def calculate_mode_of_sums():

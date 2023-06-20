@@ -14,7 +14,7 @@ sys.setrecursionlimit(10000)
 csv_files = glob.glob("./*.csv")
 data = pd.concat([pd.read_csv(file) for file in csv_files])
 
-mean_allowance = 0.02
+mean_allowance = 0.45
 accuracy_allowance = 0.60
 test_size = 0.0015
 

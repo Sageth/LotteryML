@@ -1,10 +1,12 @@
 import glob
+import os
 import sys
 from datetime import datetime, timedelta
 
+import joblib
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
 sys.setrecursionlimit(50000)
@@ -15,9 +17,10 @@ data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 """ Configuration """
 mean_allowance = 0.05
-accuracy_allowance = 0.55
-test_size = 0.01
+accuracy_allowance = 0.75
+test_size = 0.30
 myrange = range(1, 6)  # 5 balls, indexed 1 - 6
+model_save_path = "./models/"  # Define the path to save models
 """ End Configuration """
 
 
@@ -26,32 +29,38 @@ def calculate_mode_of_sums():
     sums = data.iloc[:, 2:].sum(axis=1)
 
     # Calculate the mode of the sums within the mean allowance
-    mode_sum = sums[(sums >= sums.mode()[0] - mean_allowance * sums.mode()[0]) & (
-            sums <= sums.mode()[0] + mean_allowance * sums.mode()[0])].mode()[0]
+    mode_sum = sums[
+        (sums >= sums.mode()[0] - mean_allowance * sums.mode()[0]) &
+        (sums <= sums.mode()[0] + mean_allowance * sums.mode()[0])
+    ].mode()[0]
 
     return mode_sum
 
 
-def handle_duplicates(ball_mode_values, ball):
-    unique_values, counts = np.unique(ball_mode_values, return_counts=True)
-    duplicate_values = unique_values[counts > 1]
+def train_and_save_model(ball):
+    model_filename = os.path.join(model_save_path, f"model_ball{ball}.joblib")
 
-    while len(duplicate_values) > 0:
-        for duplicate_value in duplicate_values:
-            duplicate_indices = np.where(ball_mode_values == duplicate_value)[0]
-            for index in duplicate_indices:
-                x = data.drop(f"Ball{ball}", axis=1)
-                y = data[f"Ball{ball}"]
-                x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
-                model = LinearRegression()
-                model.fit(x_train, y_train)
-                predictions = model.predict(x_test)
-                ball_mode_values[index] = predictions[0]
+    if not os.path.exists(model_filename):
+        # Split data into X and y
+        x = data.drop(["Date", f"Ball{ball}"], axis=1)
+        y = data[f"Ball{ball}"]
 
-        unique_values, counts = np.unique(ball_mode_values, return_counts=True)
-        duplicate_values = unique_values[counts > 1]
+        # Split data into training and testing sets
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
 
-    return ball_mode_values
+        # Train the model
+        model = RandomForestClassifier()
+        model.fit(x_train, y_train)
+
+        # Save the model
+        joblib.dump(model, model_filename, compress=('lz4', 9))
+        print(f"Model for Ball{ball} saved successfully.")
+        # print(f"Number of features: {len(model.feature_importances_)}")
+    else:
+        # Load the existing model
+        model = joblib.load(model_filename)
+
+    return model
 
 
 def predict_and_check():
@@ -80,18 +89,16 @@ def predict_and_check():
     # Initialize all_above_threshold variable
     all_above_threshold = True
 
-    # Train a separate model for each ball
+    # Train and save a separate model for each ball
     for ball in myrange:
+        model = train_and_save_model(ball)
+
         # Split data into X and y
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
         y = data[f"Ball{ball}"]
 
         # Split data into training and testing sets
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
-
-        # Train the model
-        model = LinearRegression()
-        model.fit(x_train, y_train)
 
         # Test the model and calculate accuracy
         accuracy = model.score(x_test, y_test)
@@ -115,37 +122,73 @@ def predict_and_check():
 
     # Ensure uniqueness for each ball
     for ball in myrange:
-        ball_mode_values = mode_values.loc[ball - 1, :].values
-        ball_mode_values = handle_duplicates(ball_mode_values, ball)
-        mode_values.loc[ball - 1, :] = ball_mode_values
+        rounded_values = mode_values.loc[ball - 1, :].values
+
+        # Ensure uniqueness by adding a suffix if the value is repeated
+        seen_values = set()
+        for i in range(len(rounded_values)):
+            while rounded_values[i] in seen_values:
+                rounded_values[i] += 1
+            seen_values.add(rounded_values[i])
+
+        # Now, rounded_values contains unique, rounded values
+        mode_values.loc[ball - 1, :] = rounded_values
 
     # Ensure uniqueness for the final ball prediction
     final_mode_values = mode_values.iloc[-1, :].values
-    final_mode_values = handle_duplicates(final_mode_values, 6)
+    final_rounded_values = []
+
+    # Ensure uniqueness by adding a suffix if the value is repeated
+    seen_final_values = set()
+    for i in range(len(final_mode_values)):
+        if not np.isnan(final_mode_values[i]):
+            while final_mode_values[i] in seen_final_values:
+                final_mode_values[i] += 1
+            seen_final_values.add(final_mode_values[i])
+            final_rounded_values.append(int(final_mode_values[i]))
 
     # Print the predicted values and accuracy for each ball
     print("Predicted values:")
     for ball in myrange:
-        rounded_value = round(final_mode_values[ball - 1])
-        accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
-        print(f"Ball{ball}: {rounded_value}\tAccuracy: {accuracy_percentage}%")
+        if ball <= len(final_rounded_values):
+            predicted_values = final_rounded_values[ball - 1]
+            accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
+
+            # Ensure uniqueness by adding a suffix if the value is repeated
+            seen_values = set()
+            if isinstance(predicted_values, (list, np.ndarray)):
+                rounded_values = [int(round(value)) for value in predicted_values if not np.isnan(value)]
+                for i in range(len(rounded_values)):
+                    original_rounded_value = rounded_values[i]
+                    suffix = 1
+                    while rounded_values[i] in seen_values:
+                        rounded_values[i] = original_rounded_value + suffix
+                        suffix += 1
+                    seen_values.add(rounded_values[i])
+
+                # If there's only one value, directly print it, else print the list
+                if len(rounded_values) == 1:
+                    print(f"Ball{ball}: {int(rounded_values[0])}\tAccuracy: {accuracy_percentage}%")
+                else:
+                    print(f"Ball{ball}: {list(map(int, rounded_values))}\tAccuracy: {accuracy_percentage}%")
+            else:
+                # If it's a single value, directly print it
+                rounded_value = int(predicted_values)
+                suffix = 1
+                while rounded_value in seen_values:
+                    rounded_value += 1
+                seen_values.add(rounded_value)
+                print(f"Ball{ball}: {int(rounded_value)}\tAccuracy: {accuracy_percentage}%")
+        else:
+            print(f"Ball{ball}: Not enough data for prediction")
 
     # Calculate the sum of the final ball predictions for balls 1 through 6
     predicted_sum = final_mode_values.sum()
 
-    # print(f"")
-    # print(f"Mode sum: {mode_sum}")
-    # print(f"Sum of predicted values: {predicted_sum}")
-
-    # Check if the sum of the predicted winning numbers is within 5% of the mode sum
     if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum and all_above_threshold:
         print(f"SUCCESS!")
-        # print(f"SUCCESS: The sum of the predicted winning numbers is within {mean_allowance * 100}% of the mode sum "
-        #       f"and all balls meet the accuracy threshold of {accuracy_allowance * 100}%")
-        # print(f"The current date and time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     else:
-        # print(f"FAILURE:The sum of the predicted winning numbers is not within {mean_allowance * 100}% of the mode "
-        #       f"sum or all balls do not have accuracy above {accuracy_allowance * 100}%.")
+        print(f"Did not pass tests.")
         predict_and_check()  # Call the function recursively
 
 

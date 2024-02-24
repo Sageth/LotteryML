@@ -5,7 +5,8 @@ Have fun. Maybe win something along the way. Maybe not.
 
 ### Set up
 These scripts use Python. You will need an environment set up. Maybe one day I will make this easier to do. For now,
-you need to install:
+you need to install, via pip:
+- `lz4`
 - `numpy`
 - `pandas`
 - `scipy`

@@ -12,14 +12,15 @@ from sklearn.model_selection import train_test_split
 sys.setrecursionlimit(50000)
 
 # Load data. While this will concatenate files, I suggest having only one.
-csv_files = glob.glob("./*.csv")
+csv_files = glob.glob("./source/*.csv")
 data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 """ Configuration """
-mean_allowance = 0.05
-accuracy_allowance = 0.75
-test_size = 0.30
-myrange = range(1, 6)  # 5 balls, indexed 1 - 6
+mean_allowance = 0.05  # percentage, in decimal form, from how far from the peak sum can be for all balls
+accuracy_allowance = 0.51
+test_size = 0.99
+myrange = range(1, 6)  # 5 balls, indexed 1 - 5
+timeframe_in_days = 20000  # Limits the number of days it looks back. e.g. if the game rules change.
 model_save_path = "./models/"  # Define the path to save models
 """ End Configuration """
 
@@ -29,10 +30,8 @@ def calculate_mode_of_sums():
     sums = data.iloc[:, 2:].sum(axis=1)
 
     # Calculate the mode of the sums within the mean allowance
-    mode_sum = sums[
-        (sums >= sums.mode()[0] - mean_allowance * sums.mode()[0]) &
-        (sums <= sums.mode()[0] + mean_allowance * sums.mode()[0])
-    ].mode()[0]
+    mode_sum = sums[(sums >= sums.mode()[0] - mean_allowance * sums.mode()[0]) & (
+            sums <= sums.mode()[0] + mean_allowance * sums.mode()[0])].mode()[0]
 
     return mode_sum
 
@@ -55,7 +54,6 @@ def train_and_save_model(ball):
         # Save the model
         joblib.dump(model, model_filename, compress=('lz4', 9))
         print(f"Model for Ball{ball} saved successfully.")
-        # print(f"Number of features: {len(model.feature_importances_)}")
     else:
         # Load the existing model
         model = joblib.load(model_filename)
@@ -67,7 +65,7 @@ def predict_and_check():
     print("-----------------------")
 
     # Define the cutoff date as "relatively recent" (e.g., 3 months ago from the current date)
-    cutoff_date = datetime.now() - timedelta(days=1000)
+    cutoff_date = datetime.now() - timedelta(days=timeframe_in_days)
 
     # Convert the "Date" column to datetime
     data["Date"] = pd.to_datetime(data["Date"])
@@ -182,13 +180,18 @@ def predict_and_check():
         else:
             print(f"Ball{ball}: Not enough data for prediction")
 
-    # Calculate the sum of the final ball predictions for balls 1 through 6
+    # Calculate the sum of the final ball predictions for balls.
     predicted_sum = final_mode_values.sum()
 
-    if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum and all_above_threshold:
-        print(f"SUCCESS!")
+    if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum:
+        print(f"MEAN SUM... PASSED!")
     else:
-        print(f"Did not pass tests.")
+        print(f"MEAN SUM... FAILED!")
+        predict_and_check()  # Call the function recursively
+    if all_above_threshold:
+        print(f"THRESHOLD.. PASSED!")
+    else:
+        print(f"THRESHOLD.. FAILED!")
         predict_and_check()  # Call the function recursively
 
 

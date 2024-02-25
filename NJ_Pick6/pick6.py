@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 
 sys.setrecursionlimit(50000)
@@ -33,6 +33,7 @@ def calculate_mode_of_sums():
     mode_sum = sums[(sums >= sums.mode()[0] - mean_allowance * sums.mode()[0]) & (
             sums <= sums.mode()[0] + mean_allowance * sums.mode()[0])].mode()[0]
 
+    print(f"Mode Sum: {mode_sum}")
     return mode_sum
 
 
@@ -48,7 +49,7 @@ def train_and_save_model(ball):
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
 
         # Train the model
-        model = RandomForestClassifier()
+        model = RandomForestRegressor()
         model.fit(x_train, y_train)
 
         # Save the model

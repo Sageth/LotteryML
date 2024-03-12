@@ -17,10 +17,10 @@ data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 """ Configuration """
 mean_allowance = 0.05  # percentage, in decimal form, from how far from the peak sum can be for all balls
-accuracy_allowance = 0.51
-test_size = 0.99
+accuracy_allowance = 0.22
+test_size = 0.80
 myrange = range(1, 7)  # 6 balls, indexed 1 - 7
-timeframe_in_days = 20000  # Limits the number of days it looks back. e.g. if the game rules change.
+timeframe_in_days = 15000  # Limits the number of days it looks back. e.g. if the game rules change.
 model_save_path = "./models/"  # Define the path to save models
 """ End Configuration """
 

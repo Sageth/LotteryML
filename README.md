@@ -11,7 +11,6 @@ you need to install, via pip:
 - `pandas`
 - `scipy`
 - `scikit-learn`
-- `sklearn`
 
 ### How to run
 Go to the directory you want to run and run `python <scriptname>.py`. That should be it. Nothing fancy.

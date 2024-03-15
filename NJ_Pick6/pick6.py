@@ -17,7 +17,7 @@ data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 """ Configuration """
 mean_allowance = 0.05  # percentage, in decimal form, from how far from the peak sum can be for all balls
-accuracy_allowance = 0.22
+accuracy_allowance = 0.43
 test_size = 0.80
 myrange = range(1, 7)  # 6 balls, indexed 1 - 7
 timeframe_in_days = 15000  # Limits the number of days it looks back. e.g. if the game rules change.
@@ -182,19 +182,27 @@ def predict_and_check():
             print(f"Ball{ball}: Not enough data for prediction")
 
     # Calculate the sum of the final ball predictions for balls.
-    predicted_sum = final_mode_values.sum()
+    predicted_sum = sum(final_rounded_values)
 
     if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum:
-        print(f"MEAN SUM... PASSED!")
+        print(f"MODE SUM... PASSED!")
+        mode_sum_pass = True
     else:
-        print(f"MEAN SUM... FAILED!")
-        predict_and_check()  # Call the function recursively
+        print(f"MODE SUM... FAILED!")
+        mode_sum_pass = False
+
     if all_above_threshold:
         print(f"THRESHOLD.. PASSED!")
+        threshold_pass = True
     else:
         print(f"THRESHOLD.. FAILED!")
-        predict_and_check()  # Call the function recursively
+        threshold_pass = False
 
+    if threshold_pass and mode_sum_pass:
+        print(f"PREDICTION.. SUCCESS!")
+    else:
+        print(f"PREDICTION.. FAILED")
+        predict_and_check()
 
 # Start the prediction and checking process
 predict_and_check()

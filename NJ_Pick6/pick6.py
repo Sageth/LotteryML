@@ -97,6 +97,18 @@ def train_and_save_model(ball):
     return model
 
 
+def ensure_uniqueness(values):
+    seen_values = set()
+    unique_values = []
+    for value in values:
+        original_value = value
+        while value in seen_values:
+            value += 1
+        seen_values.add(value)
+        unique_values.append(round(value))
+    return unique_values
+
+
 def predict_and_check():
     log.info("-----------------------")
     log.info("Predicted values:")
@@ -150,7 +162,7 @@ def predict_and_check():
         # Check if accuracy is below the threshold
         accuracy_calculation = True if accuracy > config["accuracy_allowance"] else False
         ball_accuracy_bool.append(accuracy_calculation)
-        log.debug(f"Ball{ball}: {accuracy} > {config["accuracy_allowance"]} // {accuracy_calculation}")
+        log.debug(f"Ball{ball}: {accuracy} > {config['accuracy_allowance']} // {accuracy_calculation}")
 
     # Convert the predictions list to a Pandas DataFrame
     predictions_df = pd.DataFrame(predictions_list).transpose()
@@ -163,59 +175,22 @@ def predict_and_check():
         rounded_values = mode_values.loc[ball - 1, :].values
 
         # Ensure uniqueness by adding a suffix if the value is repeated
-        seen_values = set()
-        for i in range(len(rounded_values)):
-            while rounded_values[i] in seen_values:
-                rounded_values[i] += 1
-            seen_values.add(rounded_values[i])
+        rounded_values = ensure_uniqueness(rounded_values)
 
         # Now, rounded_values contains unique, rounded values
         mode_values.loc[ball - 1, :] = rounded_values
 
     # Ensure uniqueness for the final ball prediction
     final_mode_values = mode_values.iloc[-1, :].values
-    final_rounded_sum = []
-
-    # Ensure uniqueness by adding a suffix if the value is repeated
-    seen_final_values = set()
-    for i in range(len(final_mode_values)):
-        if not np.isnan(final_mode_values[i]):
-            while final_mode_values[i] in seen_final_values:
-                final_mode_values[i] += 1
-            seen_final_values.add(final_mode_values[i])
-            final_rounded_sum.append(int(final_mode_values[i]))
+    final_rounded_sum = ensure_uniqueness(final_mode_values)
 
     # Print the predicted values and accuracy for each ball
     for ball in config["myrange"]:
         if ball <= len(final_rounded_sum):
-            predicted_values = final_rounded_sum[ball - 1]
+            predicted_value = final_rounded_sum[ball - 1]
             accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
 
-            # Ensure uniqueness by adding a suffix if the value is repeated
-            seen_values = set()
-            if isinstance(predicted_values, (list, np.ndarray)):
-                rounded_values = [int(round(value)) for value in predicted_values if not np.isnan(value)]
-                for i in range(len(rounded_values)):
-                    original_rounded_value = rounded_values[i]
-                    suffix = 1
-                    while rounded_values[i] in seen_values:
-                        rounded_values[i] = original_rounded_value + suffix
-                        suffix += 1
-                    seen_values.add(rounded_values[i])
-
-                ## If there's only one value, directly print it, else print the list
-                # if len(rounded_values) == 1:
-                #    log.warning(f"Ball{ball}: {int(rounded_values[0])}\tAccuracy: {accuracy_percentage}%")
-                # else:
-                #    log.info(f"Ball{ball}: {list(map(int, rounded_values))}\tAccuracy: {accuracy_percentage}%")
-            else:
-                # If it's a single value, directly print it
-                rounded_value = int(predicted_values)
-                suffix = 1
-                while rounded_value in seen_values:
-                    rounded_value += 1
-                seen_values.add(rounded_value)
-                log.info(f"Ball{ball}: {int(rounded_value)}\tAccuracy: {accuracy_percentage}%")
+            log.info(f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage}%")
         else:
             log.warning(f"Ball{ball}: Not enough data for prediction")
 

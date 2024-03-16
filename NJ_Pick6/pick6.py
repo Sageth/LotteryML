@@ -27,10 +27,12 @@ log.addHandler(stream)
 """ Configuration """
 config = {
     "accuracy_allowance": 0.91,  # The model accuracy must be above this, in decimal. (.05 = 5%)
+    "ball_game_range_low": 1, # This is the lowest number of the main game
+    "ball_game_range_high": 46, # This is the highest number of the main game
     "mode_allowance": 0.05,  # Percentage (in decimal) for how far from the mode you can be
     "mean_allowance": 0.05,  # Percentage (in decimal) for how far from the mean you can be
     "model_save_path": "./models/",  # Define the path to save models
-    "myrange": range(1, 7),  # 6 balls, indexed 1 - 7
+    "game_balls": range(1, 7),  # 6 balls, indexed 1 - 7
     "recursion_limit": sys.setrecursionlimit(50000),
     "test_size": 0.80,  # 80/20 rule
     "timeframe_in_days": 15000  # Limits the number of days it looks back. e.g. if the game rules change.
@@ -101,12 +103,14 @@ def ensure_uniqueness(values):
     seen_values = set()
     unique_values = []
     for value in values:
-        original_value = value
-        while value in seen_values:
-            value += 1
-        seen_values.add(value)
-        unique_values.append(round(value))
+        if not np.isnan(value):  # Check if value is not NaN
+            original_value = value
+            while value in seen_values:
+                value += 1
+            seen_values.add(value)
+            unique_values.append(round(value))
     return unique_values
+
 
 
 def predict_and_check():
@@ -134,12 +138,13 @@ def predict_and_check():
     predictions_list = []
     accuracies = []
     ball_accuracy_bool = []
+    ball_valid_bool = []
 
     # Initialize all_above_threshold variable
     all_above_threshold = None
 
     # Train and save a separate model for each ball
-    for ball in config["myrange"]:
+    for ball in config["game_balls"]:
         model = train_and_save_model(ball)
 
         # Split data into X and y
@@ -171,7 +176,7 @@ def predict_and_check():
     mode_values = predictions_df.mode(axis=1)
 
     # Ensure uniqueness for each ball
-    for ball in config["myrange"]:
+    for ball in config["game_balls"]:
         rounded_values = mode_values.loc[ball - 1, :].values
 
         # Ensure uniqueness by adding a suffix if the value is repeated
@@ -185,12 +190,17 @@ def predict_and_check():
     final_rounded_sum = ensure_uniqueness(final_mode_values)
 
     # Print the predicted values and accuracy for each ball
-    for ball in config["myrange"]:
+    for ball in config["game_balls"]:
         if ball <= len(final_rounded_sum):
-            predicted_value = final_rounded_sum[ball - 1]
+            predicted_value = round(final_rounded_sum[ball - 1])
             accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
 
-            log.info(f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage}%")
+            valid_range = True if predicted_value < config["ball_game_range_high"] else False
+            ball_valid_bool.append(valid_range)
+            if predicted_value <= config["ball_game_range_high"]:
+                log.info(f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage:.2f}%\tValid Range: {valid_range}")
+            else:
+                log.warning(f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage:.2f}%\tValid Range: {valid_range}")
         else:
             log.warning(f"Ball{ball}: Not enough data for prediction")
 
@@ -218,7 +228,12 @@ def predict_and_check():
     accuracy_pass = True if all(ball_accuracy_bool) else False
     log.debug(f"Accuracy Pass: {accuracy_pass}")
 
-    if accuracy_pass and mode_sum_pass and mean_sum_pass:
+    """ RANGE """
+    valid_balls = True if all(ball_valid_bool) else False
+    log.debug(f"Valid range: {valid_balls}")
+
+    """ FINAL CHECK """
+    if accuracy_pass and mode_sum_pass and mean_sum_pass and valid_balls:
         log.info(f"PREDICTION.. SUCCESS!")
     else:
         log.error(f"PREDICTION.. FAILED")

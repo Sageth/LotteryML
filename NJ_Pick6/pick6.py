@@ -184,25 +184,15 @@ def predict_and_check():
     # Calculate the sum of the final ball predictions for balls.
     predicted_sum = sum(final_rounded_values)
 
-    if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum:
-        print(f"MODE SUM... PASSED!")
-        mode_sum_pass = True
-    else:
-        print(f"MODE SUM... FAILED!")
-        mode_sum_pass = False
-
-    if all_above_threshold:
-        print(f"THRESHOLD.. PASSED!")
-        threshold_pass = True
-    else:
-        print(f"THRESHOLD.. FAILED!")
-        threshold_pass = False
+    mode_sum_pass = True if abs(predicted_sum - mode_sum) <= mean_allowance * mode_sum else False
+    threshold_pass = True if all_above_threshold else False
 
     if threshold_pass and mode_sum_pass:
         print(f"PREDICTION.. SUCCESS!")
     else:
         print(f"PREDICTION.. FAILED")
         predict_and_check()
+
 
 # Start the prediction and checking process
 predict_and_check()

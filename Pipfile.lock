@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "955a98679de0f7b95984e8678f2fe624161b12294e8a85a3a0558ffa93815ad3"
+            "sha256": "c416f1b66d103466bc1f26d78bf398e1ffcaf11bf04395567117993e91c270b5"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -17,6 +17,15 @@
         ]
     },
     "default": {
+        "colorlog": {
+            "hashes": [
+                "sha256:3e3e079a41feb5a1b64f978b5ea4f46040a94f11f0e8bbb8261e3dbbeca64d44",
+                "sha256:4dcbb62368e2800cb3c5abd348da7e53f6c362dda502ec27c560b2e58a66bd33"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.6'",
+            "version": "==6.8.2"
+        },
         "joblib": {
             "hashes": [
                 "sha256:92f865e621e17784e7955080b6d042489e3b8e294949cc44c6eac304f59772b1",

@@ -1,7 +1,6 @@
 import glob
 import logging
 import os
-import sys
 from datetime import datetime, timedelta
 
 import joblib
@@ -29,7 +28,7 @@ config = {
     "accuracy_allowance": 0.91,  # The model accuracy must be above this, in decimal. (.05 = 5%)
     "ball_game_range_low": 1,  # This is the lowest number of the main game
     "ball_game_range_high": 46,  # This is the highest number of the main game
-    "mode_allowance": 0.05,  # Percentage (in decimal) for how far from the mode you can be
+    "mode_allowance": 0.10,  # Percentage (in decimal) for how far from the mode you can be
     "mean_allowance": 0.05,  # Percentage (in decimal) for how far from the mean you can be
     "model_save_path": "./models/",  # Define the path to save models
     "game_balls": range(1, 7),  # 6 balls, indexed 1 - 7 (index 0 is the date)
@@ -50,7 +49,7 @@ data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 def calculate_mode_of_sums():
     # Calculate the sum of each set of numbers
-    sums = data.iloc[:, 2:].sum(axis=1)
+    sums = data.iloc[:, 1:].sum(axis=1)
 
     # Calculate the mode of the sums within the mode allowance
     mode_sum = sums.mode()[0]
@@ -81,7 +80,7 @@ def train_and_save_model(ball):
 
         # Train the model using cross-validation
         model = RandomForestRegressor()
-        scores = cross_val_score(model, x, y, cv=30)  # Use 30-fold cross-validation
+        scores = cross_val_score(model, x, y, cv=5)  # Use n-fold cross-validation
         mean_score = np.mean(scores)
         log.debug(f"Mean Cross-Validation Score for Ball{ball}: {mean_score}")
 

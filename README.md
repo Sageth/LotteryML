@@ -1,11 +1,19 @@
 # Machine Learning Lottery
 
 ## Purpose
-Have fun. Maybe win something along the way. Maybe not.
+Have fun. Maybe win something along the way. Maybe not. 
+
+## Disclaimer
+There is no guarantee that you will win anything and this code is a personal learning experiment. You may lose a lot of
+real money using this script to play the lottery. There is no warranty and the code is provided AS-IS. Play at your 
+own risk. If this works and you win, consider yourself extremely lucky.
 
 ### Set up
-These scripts use Python. You will need an environment set up. Maybe one day I will make this easier to do. For now,
-you need to install, via pip:
+I strongly recommend using pipenv. Once you've created your virtual environment, just do `pipenv sync`.
+
+If you prefer to do it the long way, your best bet is to look at the import statements. As a convenience, I will try
+to keep this list updated. You will need to install the following.
+- `colorlog`
 - `lz4`
 - `numpy`
 - `pandas`

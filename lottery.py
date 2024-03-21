@@ -12,11 +12,12 @@ from colorlog import ColoredFormatter
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
 
 
 def configure_logging():
     """ Setting up log streams for color-coded logs """
-    log_level = logging.INFO
+    log_level = logging.DEBUG
     log_format = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
     logging.root.setLevel(log_level)
     formatter = ColoredFormatter(log_format)
@@ -76,7 +77,7 @@ def calculate_mean_of_sums():
 def train_and_save_model(ball=None, modeldir=None):
     modeldir = os.path.join(modeldir, "models")
     model_filename = os.path.join(modeldir, f"model_ball{ball}.joblib")
-    log.debug(f"Model_filename: {model_filename}")
+    # log.debug(f"Model_filename: {model_filename}")
 
     if not os.path.exists(model_filename):
         # Split data into X and y
@@ -154,12 +155,8 @@ def predict_and_check(gamedir=None):
 
     # Create an empty list to store the predicted values for each ball
     predictions_list = []
-    accuracies = []
-    ball_accuracy_bool = []
+    mae_list = []
     ball_valid_bool = []
-
-    # Initialize all_above_threshold variable
-    all_above_threshold = False
 
     # Train and save a separate model for each ball
     for ball in config["game_balls"]:
@@ -171,16 +168,12 @@ def predict_and_check(gamedir=None):
 
         """
         Split data into training and testing sets. Here's why:
-        Here's why:
-
         Equal Probability: In a fair lottery system, each ball number should have an equal probability of being drawn. 
         Therefore, there is no inherent class imbalance that needs to be addressed through stratification.
-
         Avoiding Biases: Shuffling the data helps to ensure that the model does not inadvertently learn patterns related
         to the order of the samples. This is particularly important in scenarios where the data may have some intrinsic 
         ordering, such as temporal data. By shuffling the data, you remove any potential biases introduced by the 
         ordering of samples. 
-
         Generalization: Shuffling promotes better generalization by ensuring that the model learns 
         to recognize patterns across the entire dataset rather than being influenced by the order in which the data was 
         collected or recorded.
@@ -188,20 +181,21 @@ def predict_and_check(gamedir=None):
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"],
                                                             train_size=config["train_size"], shuffle=True)
 
-        # Test the model and calculate accuracy
-        accuracy = model.score(x_test, y_test)
-        accuracies.append(accuracy)
-
-        # Make predictions
+        # Test the model and calculate MAE
         predictions = model.predict(x_test)
+        log.debug(f"Predictions Type: {type(predictions)}")
+        mae = mean_absolute_error(y_test, predictions)
+        mae_list.append(mae)
 
         # Append the predicted values to the list
+        # log.debug(f"Predictions: {predictions}")
         predictions_list.append(predictions)
 
-        # Check if accuracy is below the threshold
-        accuracy_calculation = True if accuracy > config["accuracy_allowance"] else False
-        ball_accuracy_bool.append(accuracy_calculation)
-        log.debug(f"Ball{ball}: {accuracy} > {config['accuracy_allowance']} // {accuracy_calculation}")
+        # Check if predictions are within the valid range
+        log.debug(f"Config High Ball Type: {type(config["ball_game_range_high"])}")
+        for prediction in predictions:
+            valid_range = prediction <= config["ball_game_range_high"]
+            ball_valid_bool.append(valid_range)
 
     # Convert the predictions list to a Pandas DataFrame
     predictions_df = pd.DataFrame(predictions_list).transpose()
@@ -223,20 +217,24 @@ def predict_and_check(gamedir=None):
     final_mode_values = mode_values.iloc[-1, :].values
     final_rounded_sum = ensure_uniqueness(final_mode_values)
 
-    # Print the predicted values and accuracy for each ball
+    # Handle errors
+    if final_rounded_sum is None:
+        log.error("Final rounded sum is None. This is an unidentified bug. Prediction process failed. Run again.")
+        predict_and_check(gamedir=gamedir)
+
+    # Print the predicted values and MAE for each ball
     for ball in config["game_balls"]:
         if ball <= len(final_rounded_sum):
             predicted_value = round(final_rounded_sum[ball - 1])
-            accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
+            mae_value = round(mae_list[ball - 1], 2)
 
             valid_range = True if predicted_value <= config["ball_game_range_high"] else False
-            ball_valid_bool.append(valid_range)
-            if predicted_value <= config["ball_game_range_high"]:
+            if valid_range:
                 log.info(
-                    f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage:.2f}%\tValid Range: {valid_range}")
+                    f"Ball{ball}: {predicted_value}\tMAE: {mae_value}\tValid Range: {valid_range}")
             else:
                 log.warning(
-                    f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage:.2f}%\tValid Range: {valid_range}")
+                    f"Ball{ball}: {predicted_value}\tMAE: {mae_value}\tValid Range: {valid_range}")
         else:
             log.warning(f"Ball{ball}: Not enough data for prediction")
 
@@ -259,17 +257,17 @@ def predict_and_check(gamedir=None):
     log.debug(f"Mean Sum Range: {mean_sum - mean_range} to {mean_sum + mean_range} // {mean_sum_pass}")
 
     """
-    ACCURACY
+    MAE - Closer to 0 is better!
     """
-    accuracy_pass = True if all(ball_accuracy_bool) else False
-    log.debug(f"Accuracy Pass: {accuracy_pass}")
+    mae_pass = True if all(mae <= config["mae_allowance"] for mae in mae_list) else False
+    log.debug(f"MAE Pass: {mae_pass}")
 
     """ RANGE """
-    valid_balls = True if all(ball_valid_bool) else False
-    log.debug(f"Valid range: {valid_balls}")
+    valid_balls = all(ball_valid_bool)
+    log.debug(f"Valid range: {ball_valid_bool} == {valid_balls}")
 
     """ FINAL CHECK """
-    if accuracy_pass and mode_sum_pass and mean_sum_pass and valid_balls:
+    if mae_pass and mode_sum_pass and mean_sum_pass and valid_balls:
         log.info(f"PREDICTION.. SUCCESS!")
     else:
         log.error(f"PREDICTION.. FAILED")
@@ -279,25 +277,27 @@ def predict_and_check(gamedir=None):
 """
 MAIN PROGRAM
 """
-# Start by enabling logging
-log = configure_logging()
 
-# Define and parse command-line arguments
-parser = argparse.ArgumentParser(description='Predict lottery numbers.')
-parser.add_argument('--gamedir',
-                    help='Directory where the configurations, models, and sources are found. No trailing slash.',
-                    required=True)
-args = parser.parse_args()
-log.debug(f"Args: {args}")
 
-# Load data
-data = load_data(gamedir=args.gamedir)
-log.debug(f"Data: {data}")
+if __name__ == '__main__':
+    # Start by enabling logging
+    log = configure_logging()
+    # Define and parse command-line arguments
+    parser = argparse.ArgumentParser(description='Predict lottery numbers.')
+    parser.add_argument('--gamedir',
+                        help='Directory where the configurations, models, and sources are found. No trailing slash.',
+                        required=True)
+    args = parser.parse_args()
+    log.debug(f"Args: {args}")
 
-# Load configuration from the provided file
-config = load_config(gamedir=args.gamedir)
-config = evaluate_config(configuration=config)
-""" End Configuration """
+    # Load data
+    data = load_data(gamedir=args.gamedir)
+    log.debug(f"Data: {data}")
 
-# Start the prediction and checking process
-predict_and_check(gamedir=args.gamedir)
+    # Load configuration from the provided file
+    config = load_config(gamedir=args.gamedir)
+    config = evaluate_config(configuration=config)
+    """ End Configuration """
+
+    # Start the prediction and checking process
+    predict_and_check(gamedir=args.gamedir)

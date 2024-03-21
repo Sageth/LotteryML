@@ -1,11 +1,13 @@
 {
-    "accuracy_allowance": 0.85,
+    "accuracy_allowance": 0.91,
     "ball_game_range_low": 1,
-    "ball_game_range_high": 45,
+    "ball_game_range_high": 69,
     "mode_allowance": 0.10,
     "mean_allowance": 0.05,
     "model_save_path": "./models/",
     "game_balls": "range(1, 6)",
+    "game_balls_extra_low": 1,
+    "game_balls_extra_high": 26,
     "test_size": 0.20,
     "train_size": 0.80,
     "timeframe_in_days": 21900

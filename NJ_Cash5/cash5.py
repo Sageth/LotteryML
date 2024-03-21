@@ -94,15 +94,28 @@ def train_and_save_model(ball):
 def ensure_uniqueness(values):
     seen_values = set()
     unique_values = []
+
+    # Determine the maximum ball number dynamically based on the column names in the data
+    max_ball_number = int(data.columns[-1].replace('Ball', ''))
+
     for value in values:
         if not np.isnan(value):  # Check if value is not NaN
             new_value = round(value)
-            while new_value in seen_values:
-                new_value += 1
-                if new_value > config["ball_game_range_high"]:
-                    return None  # Return None if value exceeds the upper range
-            seen_values.add(new_value)
-            unique_values.append(new_value)
+
+            # If the values are less than the max range for the game. Accounts for different ball counts across games.
+            if len(unique_values) < max_ball_number:
+                while new_value in seen_values:
+                    new_value += 1
+                    if new_value > config["ball_game_range_high"]:
+                        return None  # Return None if value exceeds the upper range
+                seen_values.add(new_value)
+                unique_values.append(new_value)
+            else:  # For the extra ball (powerball, mega ball, etc)
+                if config["ball_game_extra_low"] <= new_value <= config["ball_game_extra_high"]:
+                    unique_values.append(new_value)
+                else:
+                    # If the predicted value for the extra ball outside the range, set value to none
+                    unique_values.append(None)
     return unique_values
 
 
@@ -254,6 +267,7 @@ def predict_and_check():
 """ Configuration """
 config = load_config(configuration="config/config.json")
 config = evaluate_config(config)
+log.debug(config)
 """ End Configuration """
 
 # Start the prediction and checking process

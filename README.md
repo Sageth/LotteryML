@@ -15,6 +15,19 @@ you need to install, via pip:
 ### How to run
 Go to the directory you want to run and run `python <scriptname>.py`. That should be it. Nothing fancy.
 
+### Config
+`accuracy_allowance`: The model accuracy must be above this, in decimal. (.05 = 5%)
+`ball_game_range_low`: This is the lowest number of the main game
+`ball_game_range_high`: This is the highest number of the main game
+`mode_allowance`: Percentage (in decimal) for how far from the mode you can be. i.e. .05 (5%) from the mode of the sums.
+`mean_allowance`: Percentage (in decimal) for how far from the mean you can be. i.e. .05 (5%) from the mean of the sums.
+`model_save_path`: Define the path to save models. You probably shouldn't change this.
+`game_balls`: Number of balls. Index 0 is the date.
+`test_size`: Percentage of testing data. 20% is recommended.
+`train_size`: Percentage of training data. 80% is recommended.
+`timeframe_in_days`: Limits the number of days it looks back. e.g. if the game rules change. Defaults to 60 years.
+
+
 ### Notes
 - Focus right now is on NJ Pick 6 and Cash 5 because they have straight numbers, nothing duplicated. 
 - Testing various ways. 

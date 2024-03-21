@@ -1,4 +1,5 @@
 import glob
+import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -23,29 +24,21 @@ log = logging.getLogger()
 log.setLevel(LOG_LEVEL)
 log.addHandler(stream)
 
-""" Configuration """
-config = {
-    "accuracy_allowance": 0.85,  # The model accuracy must be above this, in decimal. (.05 = 5%)
-    "ball_game_range_low": 1,  # This is the lowest number of the main game
-    "ball_game_range_high": 45,  # This is the highest number of the main game
-    "mode_allowance": 0.10,  # Percentage (in decimal) for how far from the mode you can be
-    "mean_allowance": 0.05,  # Percentage (in decimal) for how far from the mean you can be
-    "model_save_path": "./models/",  # Define the path to save models
-    "game_balls": range(1, 6),  # index 0 is the date
-    "test_size": 0.20,  # 20% Testing
-    "train_size": 0.80,  # 80% Training
-    "timeframe_in_days": 15000  # Limits the number of days it looks back. e.g. if the game rules change.
-}
-""" End Configuration """
-
-log.debug(config)
-
-# Load data. While this will concatenate files, I suggest having only one.
+# Load data. While this will concatenate files, it's easier to just have one file
 csv_files = glob.glob("./source/*.csv")
 data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 
-# log.debug(f"Data: {data}")
+def load_config(configuration=None):
+    with open(configuration, 'r') as f:
+        return json.load(f)
+
+
+def evaluate_config(configuration=None):
+    for key, value in configuration.items():
+        if isinstance(value, str) and value.startswith("range(") and value.endswith(")"):
+            configuration[key] = eval(value)
+    return configuration
 
 
 def calculate_mode_of_sums():
@@ -257,6 +250,11 @@ def predict_and_check():
         log.error(f"PREDICTION.. FAILED")
         predict_and_check()
 
+
+""" Configuration """
+config = load_config(configuration="config/config.json")
+config = evaluate_config(config)
+""" End Configuration """
 
 # Start the prediction and checking process
 predict_and_check()

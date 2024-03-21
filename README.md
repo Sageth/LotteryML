@@ -13,7 +13,10 @@ you need to install, via pip:
 - `scikit-learn`
 
 ### How to run
-Go to the directory you want to run and run `python <scriptname>.py`. That should be it. Nothing fancy.
+Go to the main directory and run `python lottery.py --gamedir <GAMEDIRECTORY>`. 
+
+The argument `GAMEDIRECTORY` is a case-sensitive value of the game that you want to run. For example:
+`python lottery.py --gamedir NJ_Pick6`. Please note that not all games are fully working yet.
 
 ### Config
 `accuracy_allowance`: The model accuracy must be above this, in decimal. (.05 = 5%)

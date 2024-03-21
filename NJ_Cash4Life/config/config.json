@@ -4,7 +4,7 @@
     "ball_game_range_high": 60,
     "mode_allowance": 0.10,
     "mean_allowance": 0.05,
-    "model_save_path": "./models/",
+    "model_save_path": "models",
     "game_balls": "range(1, 6)",
     "game_balls_extra_low": 1,
     "game_balls_extra_high": 4,

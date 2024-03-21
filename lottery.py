@@ -1,3 +1,4 @@
+import argparse
 import glob
 import json
 import logging
@@ -12,25 +13,32 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
 
-""" Setting up log streams for color-coded logs """
-LOG_LEVEL = logging.DEBUG
-LOGFORMAT = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
-logging.root.setLevel(LOG_LEVEL)
-formatter = ColoredFormatter(LOGFORMAT)
-stream = logging.StreamHandler()
-stream.setLevel(LOG_LEVEL)
-stream.setFormatter(formatter)
-log = logging.getLogger()
-log.setLevel(LOG_LEVEL)
-log.addHandler(stream)
 
-# Load data. While this will concatenate files, it's easier to just have one file
-csv_files = glob.glob("./source/*.csv")
-data = pd.concat([pd.read_csv(file) for file in csv_files])
+def configure_logging():
+    """ Setting up log streams for color-coded logs """
+    log_level = logging.INFO
+    log_format = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
+    logging.root.setLevel(log_level)
+    formatter = ColoredFormatter(log_format)
+    stream = logging.StreamHandler()
+    stream.setLevel(log_level)
+    stream.setFormatter(formatter)
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    logger.addHandler(stream)
+    return logger
 
 
-def load_config(configuration=None):
-    with open(configuration, 'r') as f:
+def load_data(gamedir=None):
+    # Load data. While this will concatenate files, it's easier to just have one file
+    csv_files = glob.glob(os.path.join(gamedir, "./source/*.csv"))
+    game_data = pd.concat([pd.read_csv(file) for file in csv_files])
+    return game_data
+
+
+def load_config(gamedir=None):
+    config_path = f"{gamedir}/config/config.json"
+    with open(config_path, 'r') as f:
         return json.load(f)
 
 
@@ -38,6 +46,7 @@ def evaluate_config(configuration=None):
     for key, value in configuration.items():
         if isinstance(value, str) and value.startswith("range(") and value.endswith(")"):
             configuration[key] = eval(value)
+    log.debug(configuration)
     return configuration
 
 
@@ -64,8 +73,10 @@ def calculate_mean_of_sums():
 
 
 # Update the train_and_save_model function
-def train_and_save_model(ball):
-    model_filename = os.path.join(config["model_save_path"], f"model_ball{ball}.joblib")
+def train_and_save_model(ball=None, modeldir=None):
+    modeldir = os.path.join(modeldir, "models")
+    model_filename = os.path.join(modeldir, f"model_ball{ball}.joblib")
+    log.debug(f"Model_filename: {model_filename}")
 
     if not os.path.exists(model_filename):
         # Split data into X and y
@@ -119,8 +130,9 @@ def ensure_uniqueness(values):
     return unique_values
 
 
-def predict_and_check():
+def predict_and_check(gamedir=None):
     log.info("-----------------------")
+    log.debug(f"Predict and Check, directory={gamedir}")
     log.info("Predicted values:")
 
     # Define the cutoff date as "relatively recent" (e.g., 3 months ago from the current date)
@@ -151,7 +163,7 @@ def predict_and_check():
 
     # Train and save a separate model for each ball
     for ball in config["game_balls"]:
-        model = train_and_save_model(ball)
+        model = train_and_save_model(ball=ball, modeldir=gamedir)
 
         # Split data into X and y
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
@@ -163,12 +175,12 @@ def predict_and_check():
 
         Equal Probability: In a fair lottery system, each ball number should have an equal probability of being drawn. 
         Therefore, there is no inherent class imbalance that needs to be addressed through stratification.
-        
+
         Avoiding Biases: Shuffling the data helps to ensure that the model does not inadvertently learn patterns related
         to the order of the samples. This is particularly important in scenarios where the data may have some intrinsic 
         ordering, such as temporal data. By shuffling the data, you remove any potential biases introduced by the 
         ordering of samples. 
-        
+
         Generalization: Shuffling promotes better generalization by ensuring that the model learns 
         to recognize patterns across the entire dataset rather than being influenced by the order in which the data was 
         collected or recorded.
@@ -261,14 +273,31 @@ def predict_and_check():
         log.info(f"PREDICTION.. SUCCESS!")
     else:
         log.error(f"PREDICTION.. FAILED")
-        predict_and_check()
+        predict_and_check(gamedir=gamedir)
 
 
-""" Configuration """
-config = load_config(configuration="config/config.json")
-config = evaluate_config(config)
-log.debug(config)
+"""
+MAIN PROGRAM
+"""
+# Start by enabling logging
+log = configure_logging()
+
+# Define and parse command-line arguments
+parser = argparse.ArgumentParser(description='Predict lottery numbers.')
+parser.add_argument('--gamedir',
+                    help='Directory where the configurations, models, and sources are found. No trailing slash.',
+                    required=True)
+args = parser.parse_args()
+log.debug(f"Args: {args}")
+
+# Load data
+data = load_data(gamedir=args.gamedir)
+log.debug(f"Data: {data}")
+
+# Load configuration from the provided file
+config = load_config(gamedir=args.gamedir)
+config = evaluate_config(configuration=config)
 """ End Configuration """
 
 # Start the prediction and checking process
-predict_and_check()
+predict_and_check(gamedir=args.gamedir)

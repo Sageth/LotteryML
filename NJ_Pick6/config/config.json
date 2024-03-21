@@ -4,7 +4,7 @@
     "ball_game_range_high": 46,
     "mode_allowance": 0.10,
     "mean_allowance": 0.05,
-    "model_save_path": "./models/",
+    "model_save_path": "models",
     "game_balls": "range(1, 7)",
     "test_size": 0.20,
     "train_size": 0.80,

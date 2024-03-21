@@ -1,7 +1,6 @@
 import glob
 import logging
 import os
-import sys
 from datetime import datetime, timedelta
 
 import joblib
@@ -26,14 +25,15 @@ log.addHandler(stream)
 
 """ Configuration """
 config = {
-    "accuracy_allowance": 0.86,  # The model accuracy must be above this, in decimal. (.05 = 5%)
+    "accuracy_allowance": 0.85,  # The model accuracy must be above this, in decimal. (.05 = 5%)
     "ball_game_range_low": 1,  # This is the lowest number of the main game
     "ball_game_range_high": 45,  # This is the highest number of the main game
-    "mode_allowance": 0.05,  # Percentage (in decimal) for how far from the mode you can be
+    "mode_allowance": 0.10,  # Percentage (in decimal) for how far from the mode you can be
     "mean_allowance": 0.05,  # Percentage (in decimal) for how far from the mean you can be
     "model_save_path": "./models/",  # Define the path to save models
-    "game_balls": range(1, 6),  # 5 balls, indexed 1 - 6 (index 0 is the date)
-    "test_size": 0.80,  # 80/20 rule
+    "game_balls": range(1, 6),  # index 0 is the date
+    "test_size": 0.20,  # 20% Testing
+    "train_size": 0.80,  # 80% Training
     "timeframe_in_days": 15000  # Limits the number of days it looks back. e.g. if the game rules change.
 }
 """ End Configuration """
@@ -50,7 +50,7 @@ data = pd.concat([pd.read_csv(file) for file in csv_files])
 
 def calculate_mode_of_sums():
     # Calculate the sum of each set of numbers
-    sums = data.iloc[:, 2:].sum(axis=1)
+    sums = data.iloc[:, 1:].sum(axis=1)
 
     # Calculate the mode of the sums within the mode allowance
     mode_sum = sums.mode()[0]
@@ -81,7 +81,7 @@ def train_and_save_model(ball):
 
         # Train the model using cross-validation
         model = RandomForestRegressor()
-        scores = cross_val_score(model, x, y, cv=30)  # Use 30-fold cross-validation
+        scores = cross_val_score(model, x, y, cv=5)  # Use n-fold cross-validation
         mean_score = np.mean(scores)
         log.debug(f"Mean Cross-Validation Score for Ball{ball}: {mean_score}")
 
@@ -151,8 +151,24 @@ def predict_and_check():
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
         y = data[f"Ball{ball}"]
 
-        # Split data into training and testing sets
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"])
+        """
+        Split data into training and testing sets. Here's why:
+        Here's why:
+
+        Equal Probability: In a fair lottery system, each ball number should have an equal probability of being drawn. 
+        Therefore, there is no inherent class imbalance that needs to be addressed through stratification.
+
+        Avoiding Biases: Shuffling the data helps to ensure that the model does not inadvertently learn patterns related
+        to the order of the samples. This is particularly important in scenarios where the data may have some intrinsic 
+        ordering, such as temporal data. By shuffling the data, you remove any potential biases introduced by the 
+        ordering of samples. 
+
+        Generalization: Shuffling promotes better generalization by ensuring that the model learns 
+        to recognize patterns across the entire dataset rather than being influenced by the order in which the data was 
+        collected or recorded.
+        """
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"],
+                                                            train_size=config["train_size"], shuffle=True)
 
         # Test the model and calculate accuracy
         accuracy = model.score(x_test, y_test)

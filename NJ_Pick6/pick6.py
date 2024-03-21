@@ -32,7 +32,8 @@ config = {
     "mean_allowance": 0.05,  # Percentage (in decimal) for how far from the mean you can be
     "model_save_path": "./models/",  # Define the path to save models
     "game_balls": range(1, 7),  # 6 balls, indexed 1 - 7 (index 0 is the date)
-    "test_size": 0.80,  # 80/20 rule
+    "test_size": 0.20,  # 20% Testing
+    "train_size": 0.80,  # 80% Training
     "timeframe_in_days": 15000  # Limits the number of days it looks back. e.g. if the game rules change.
 }
 """ End Configuration """
@@ -150,8 +151,24 @@ def predict_and_check():
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
         y = data[f"Ball{ball}"]
 
-        # Split data into training and testing sets
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"])
+        """
+        Split data into training and testing sets. Here's why:
+        Here's why:
+
+        Equal Probability: In a fair lottery system, each ball number should have an equal probability of being drawn. 
+        Therefore, there is no inherent class imbalance that needs to be addressed through stratification.
+        
+        Avoiding Biases: Shuffling the data helps to ensure that the model does not inadvertently learn patterns related
+        to the order of the samples. This is particularly important in scenarios where the data may have some intrinsic 
+        ordering, such as temporal data. By shuffling the data, you remove any potential biases introduced by the 
+        ordering of samples. 
+        
+        Generalization: Shuffling promotes better generalization by ensuring that the model learns 
+        to recognize patterns across the entire dataset rather than being influenced by the order in which the data was 
+        collected or recorded.
+        """
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"],
+                                                            train_size=config["train_size"], shuffle=True)
 
         # Test the model and calculate accuracy
         accuracy = model.score(x_test, y_test)

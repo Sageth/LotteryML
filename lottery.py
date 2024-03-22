@@ -158,9 +158,6 @@ def predict_and_check(gamedir=None):
     ball_accuracy_bool = []
     ball_valid_bool = []
 
-    # Initialize all_above_threshold variable
-    all_above_threshold = False
-
     # Train and save a separate model for each ball
     for ball in config["game_balls"]:
         model = train_and_save_model(ball=ball, modeldir=gamedir)

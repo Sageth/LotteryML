@@ -3,10 +3,12 @@ import glob
 import json
 import logging
 import os
+import typing
 from datetime import datetime, timedelta
 
 import joblib
 import numpy as np
+import numpy.typing
 import pandas as pd
 from colorlog import ColoredFormatter
 from sklearn.ensemble import RandomForestRegressor
@@ -29,20 +31,20 @@ def configure_logging():
     return logger
 
 
-def load_data(gamedir=None):
+def load_data(gamedir: str = None) -> pd.DataFrame:
     # Load data. While this will concatenate files, it's easier to just have one file
     csv_files = glob.glob(os.path.join(gamedir, "./source/*.csv"))
     game_data = pd.concat([pd.read_csv(file) for file in csv_files])
     return game_data
 
 
-def load_config(gamedir=None):
+def load_config(gamedir: str = None) -> json:
     config_path = f"{gamedir}/config/config.json"
     with open(config_path, 'r') as f:
         return json.load(f)
 
 
-def evaluate_config(configuration=None):
+def evaluate_config(configuration: json = None) -> json:
     for key, value in configuration.items():
         if isinstance(value, str) and value.startswith("range(") and value.endswith(")"):
             configuration[key] = eval(value)
@@ -50,7 +52,7 @@ def evaluate_config(configuration=None):
     return configuration
 
 
-def calculate_mode_of_sums():
+def calculate_mode_of_sums() -> int:
     # Calculate the sum of each set of numbers
     sums = data.iloc[:, 1:].sum(axis=1)
 
@@ -61,7 +63,7 @@ def calculate_mode_of_sums():
     return mode_sum
 
 
-def calculate_mean_of_sums():
+def calculate_mean_of_sums() -> int:
     # Calculate the sum of each set of numbers
     sums = data.iloc[:, 2:].sum(axis=1)
 
@@ -72,8 +74,24 @@ def calculate_mean_of_sums():
     return mean_sum
 
 
-# Update the train_and_save_model function
-def train_and_save_model(ball=None, modeldir=None):
+def check_mean_or_mode(value_sum: float, predicted_sum: int) -> bool:
+    """
+    MEAN
+    """
+    mean_range = value_sum * config["mean_allowance"]
+    value_pass = True if abs(predicted_sum - value_sum) <= config["mean_allowance"] * value_sum else False
+    log.debug(f"Mean Sum Range: {value_sum - mean_range} to {value_sum + mean_range} // {value_pass}")
+    return value_pass
+
+
+def check_accuracy(values: list) -> bool:
+    accuracy_pass = True if all(values) else False
+    log.debug(f"Accuracy Pass: {accuracy_pass}")
+    return accuracy_pass
+
+
+def train_and_save_model(ball: int = None, modeldir: str = None) -> numpy.typing.NDArray:
+    """ # Update the train_and_save_model function """
     modeldir = os.path.join(modeldir, "models")
     model_filename = os.path.join(modeldir, f"model_ball{ball}.joblib")
     log.debug(f"Model_filename: {model_filename}")
@@ -102,7 +120,7 @@ def train_and_save_model(ball=None, modeldir=None):
     return model
 
 
-def ensure_uniqueness(values):
+def ensure_uniqueness(values: list) -> typing.Optional[list]:
     seen_values = set()
     unique_values = []
 
@@ -130,7 +148,13 @@ def ensure_uniqueness(values):
     return unique_values
 
 
-def predict_and_check(gamedir=None):
+def test_accuracy(x_test, y_test, model, accuracy_list: list) -> list:
+    accuracy = model.score(x_test, y_test)
+    accuracy_list.append(accuracy)
+    return accuracy_list
+
+
+def predict_and_check(gamedir: str = None):
     log.info("-----------------------")
     log.debug(f"Predict and Check, directory={gamedir}")
     log.info("Predicted values:")
@@ -186,6 +210,7 @@ def predict_and_check(gamedir=None):
                                                             train_size=config["train_size"], shuffle=True)
 
         # Test the model and calculate accuracy
+        # accuracy = test_accuracy(x_test=x_test, y_test=y_test, model=model, accuracy_list=accuracies)
         accuracy = model.score(x_test, y_test)
         accuracies.append(accuracy)
 
@@ -241,25 +266,10 @@ def predict_and_check(gamedir=None):
     predicted_sum = sum(final_rounded_sum)
     log.debug(f"Predicted Sum: {predicted_sum}")
 
-    """
-    MODE
-    """
-    mode_range = mode_sum * config["mode_allowance"]
-    mode_sum_pass = True if abs(predicted_sum - mode_sum) <= config["mode_allowance"] * mode_sum else False
-    log.debug(f"Mode Sum Range: {mode_sum - mode_range} to {mode_sum + mode_range} // {mode_sum_pass}")
-
-    """
-    MEAN
-    """
-    mean_range = mean_sum * config["mean_allowance"]
-    mean_sum_pass = True if abs(predicted_sum - mean_sum) <= config["mean_allowance"] * mean_sum else False
-    log.debug(f"Mean Sum Range: {mean_sum - mean_range} to {mean_sum + mean_range} // {mean_sum_pass}")
-
-    """
-    ACCURACY
-    """
-    accuracy_pass = True if all(ball_accuracy_bool) else False
-    log.debug(f"Accuracy Pass: {accuracy_pass}")
+    """ Final Validation Checks """
+    mode_sum_pass = check_mean_or_mode(value_sum=mode_sum, predicted_sum=predicted_sum)
+    mean_sum_pass = check_mean_or_mode(value_sum=mean_sum, predicted_sum=predicted_sum)
+    accuracy_pass = check_accuracy(ball_accuracy_bool)
 
     """ RANGE """
     valid_balls = True if all(ball_valid_bool) else False

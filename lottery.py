@@ -11,14 +11,13 @@ import numpy as np
 import numpy.typing
 import pandas as pd
 from colorlog import ColoredFormatter
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor, AdaBoostRegressor
+from sklearn.model_selection import cross_val_score, train_test_split
 
 
 def configure_logging():
     """ Setting up log streams for color-coded logs """
-    log_level = logging.INFO
+    log_level = logging.DEBUG
     log_format = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
     logging.root.setLevel(log_level)
     formatter = ColoredFormatter(log_format)
@@ -80,7 +79,7 @@ def check_mean_or_mode(value_sum: float, predicted_sum: int) -> bool:
     """
     mean_range = value_sum * config["mean_allowance"]
     value_pass = True if abs(predicted_sum - value_sum) <= config["mean_allowance"] * value_sum else False
-    log.debug(f"Mean Sum Range: {value_sum - mean_range} to {value_sum + mean_range} // {value_pass}")
+    log.debug(f"Range: {value_sum - mean_range} to {value_sum + mean_range} // {value_pass}")
     return value_pass
 
 
@@ -90,8 +89,8 @@ def check_accuracy(values: list) -> bool:
     return accuracy_pass
 
 
-def train_and_save_model(ball: int = None, modeldir: str = None) -> numpy.typing.NDArray:
-    """ # Update the train_and_save_model function """
+def train_and_save_model(ball: int = None, modeldir: str = None) -> typing.List[numpy.typing.NDArray]:
+    """ Update the train_and_save_model function to include multiple models """
     modeldir = os.path.join(modeldir, "models")
     model_filename = os.path.join(modeldir, f"model_ball{ball}.joblib")
     log.debug(f"Model_filename: {model_filename}")
@@ -101,23 +100,34 @@ def train_and_save_model(ball: int = None, modeldir: str = None) -> numpy.typing
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
         y = data[f"Ball{ball}"]
 
-        # Train the model using cross-validation
-        model = RandomForestRegressor()
-        scores = cross_val_score(model, x, y, cv=5)  # Use n-fold cross-validation
-        mean_score = np.mean(scores)
-        log.debug(f"Mean Cross-Validation Score for Ball{ball}: {mean_score}")
+        # Define multiple models for ensembling
+        models = [
+            ("RandomForest", RandomForestRegressor()),
+            ("GradientBoosting", GradientBoostingRegressor()),
+            ("ExtraTrees", ExtraTreesRegressor()),
+            ("AdaBoost", AdaBoostRegressor())
+        ]
 
-        # Fit the model on the entire dataset
-        model.fit(x, y)
+        trained_models = []
 
-        # Save the model
-        joblib.dump(model, model_filename, compress=("lz4", 9))
-        log.debug(f"Model for Ball{ball} saved successfully.")
+        for name, model in models:
+            # Train the model using cross-validation
+            scores = cross_val_score(model, x, y, cv=5)  # Use n-fold cross-validation
+            mean_score = np.mean(scores)
+            log.debug(f"Mean Cross-Validation Score for {name} Ball{ball}: {mean_score}")
+
+            # Fit the model on the entire dataset
+            model.fit(x, y)
+            trained_models.append(model)
+
+        # Save the models
+        joblib.dump(trained_models, model_filename, compress=("lz4", 9))
+        log.debug(f"Models for Ball{ball} saved successfully.")
     else:
-        # Load the existing model
-        model = joblib.load(model_filename)
+        # Load the existing models
+        trained_models = joblib.load(model_filename)
 
-    return model
+    return trained_models
 
 
 def ensure_uniqueness(values: list) -> typing.Optional[list]:
@@ -148,8 +158,10 @@ def ensure_uniqueness(values: list) -> typing.Optional[list]:
     return unique_values
 
 
-def test_accuracy(x_test, y_test, model, accuracy_list: list) -> list:
-    accuracy = model.score(x_test, y_test)
+def test_accuracy(x_test, y_test, models, accuracy_list: list) -> list:
+    # Combine the predictions of multiple models
+    predictions = np.mean([model.predict(x_test) for model in models], axis=0)
+    accuracy = np.mean([model.score(x_test, y_test) for model in models])
     accuracy_list.append(accuracy)
     return accuracy_list
 
@@ -184,7 +196,7 @@ def predict_and_check(gamedir: str = None):
 
     # Train and save a separate model for each ball
     for ball in config["game_balls"]:
-        model = train_and_save_model(ball=ball, modeldir=gamedir)
+        models = train_and_save_model(ball=ball, modeldir=gamedir)
 
         # Split data into X and y
         x = data.drop(["Date", f"Ball{ball}"], axis=1)
@@ -209,13 +221,12 @@ def predict_and_check(gamedir: str = None):
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"],
                                                             train_size=config["train_size"], shuffle=True)
 
-        # Test the model and calculate accuracy
-        # accuracy = test_accuracy(x_test=x_test, y_test=y_test, model=model, accuracy_list=accuracies)
-        accuracy = model.score(x_test, y_test)
+        # Test the models and calculate accuracy
+        accuracy = np.mean([model.score(x_test, y_test) for model in models])
         accuracies.append(accuracy)
 
         # Make predictions
-        predictions = model.predict(x_test)
+        predictions = np.mean([model.predict(x_test) for model in models], axis=0)
 
         # Append the predicted values to the list
         predictions_list.append(predictions)

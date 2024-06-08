@@ -58,6 +58,17 @@ The argument `GAMEDIRECTORY` is a case-sensitive value of the game that you want
 - Good luck.
 
 ### Methodology
-- Predict numbers using machine learning. 
 - Validate that the sum of the predicted numbers is within x% of the mode of the most common sum of winning numbers.
 - This would make more sense if I graphed it out. Maybe, again, one day.
+
+---
+
+## Troubleshooting
+
+---
+Error: `InconsistentVersionWarning: Trying to unpickle estimator DecisionTreeRegressor from 
+version x.y.z.post1 when using version a.b.c. This might lead to breaking code or invalid results. Use at your own risk.`
+
+Solution: Delete the `*.joblib` files in the `models` directory and rerun. The files will be regenerated.
+
+---

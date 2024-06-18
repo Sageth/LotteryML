@@ -73,13 +73,13 @@ def calculate_mean_of_sums() -> int:
     return mean_sum
 
 
-def check_mean_or_mode(value_sum: float, predicted_sum: int) -> bool:
+def check_mean_or_mode(value_sum: float, predicted_sum: int, checktype: str = None) -> bool:
     """
     MEAN
     """
     mean_range = value_sum * config["mean_allowance"]
     value_pass = True if abs(predicted_sum - value_sum) <= config["mean_allowance"] * value_sum else False
-    log.debug(f"Range: {value_sum - mean_range} to {value_sum + mean_range} // {value_pass}")
+    log.debug(f"{checktype} Range: {value_sum - mean_range} to {value_sum + mean_range} // {value_pass}")
     return value_pass
 
 
@@ -278,8 +278,8 @@ def predict_and_check(gamedir: str = None):
     log.debug(f"Predicted Sum: {predicted_sum}")
 
     """ Final Validation Checks """
-    mode_sum_pass = check_mean_or_mode(value_sum=mode_sum, predicted_sum=predicted_sum)
-    mean_sum_pass = check_mean_or_mode(value_sum=mean_sum, predicted_sum=predicted_sum)
+    mode_sum_pass = check_mean_or_mode(value_sum=mode_sum, predicted_sum=predicted_sum, checktype="Mode")
+    mean_sum_pass = check_mean_or_mode(value_sum=mean_sum, predicted_sum=predicted_sum, checktype="Mean")
     accuracy_pass = check_accuracy(ball_accuracy_bool)
 
     """ RANGE """

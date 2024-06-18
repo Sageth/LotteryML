@@ -1,5 +1,5 @@
 {
-    "accuracy_allowance": 0.86,
+    "accuracy_allowance": 0.60,
     "mae_allowance": 0.91,
     "ball_game_range_low": 1,
     "ball_game_range_high": 60,

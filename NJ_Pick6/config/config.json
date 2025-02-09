@@ -9,5 +9,5 @@
     "game_balls": "range(1, 7)",
     "test_size": 0.20,
     "train_size": 0.80,
-    "timeframe_in_days": 21900
+    "timeframe_in_days": 90
 }

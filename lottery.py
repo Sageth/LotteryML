@@ -3,20 +3,20 @@ import glob
 import json
 import logging
 import os
-import typing
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import joblib
 import numpy as np
 import pandas as pd
 from colorlog import ColoredFormatter
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor, AdaBoostRegressor
-from sklearn.metrics import r2_score
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor, AdaBoostRegressor, StackingRegressor
+from sklearn.linear_model import RidgeCV
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import random
 
 
 def configure_logging():
-    """ Setting up log streams for color-coded logs """
     log_level = logging.DEBUG
     log_format = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
     logging.root.setLevel(log_level)
@@ -29,313 +29,190 @@ def configure_logging():
     logger.addHandler(stream)
     return logger
 
-def load_data(gamedir: str = None) -> pd.DataFrame:
-    # Load data. While this will concatenate files, it's easier to just have one file
+
+def load_data(gamedir: str) -> pd.DataFrame:
     csv_files = glob.glob(os.path.join(gamedir, "./source/*.csv"))
     game_data = pd.concat([pd.read_csv(file) for file in csv_files])
     return game_data
 
-def load_config(gamedir: str = None) -> json:
-    config_path = f"{gamedir}/config/config.json"
+
+def load_config(gamedir: str) -> dict:
+    config_path = os.path.join(gamedir, "config/config.json")
     with open(config_path, 'r') as f:
         return json.load(f)
 
-def evaluate_config(configuration: json = None) -> json:
-    for key, value in configuration.items():
+
+def evaluate_config(config: dict) -> dict:
+    for key, value in config.items():
         if isinstance(value, str) and value.startswith("range(") and value.endswith(")"):
-            configuration[key] = eval(value)
-    log.debug(configuration)
-    return configuration
-
-def calculate_mode_of_sums() -> int:
-    sums = data.iloc[:, 1:].values.sum(axis=1)
-    mode_sum = pd.Series(sums).mode()[0]
-    log.debug(f"Mode Sum: {mode_sum}")
-    return mode_sum
-
-def calculate_mean_of_sums() -> int:
-    # Calculate the sum of each set of numbers
-    sums = data.iloc[:, 2:].values.sum(axis=1)
-    mean_sum = sums.mean()
-    log.debug(f"Mean Sum: {mean_sum}")
-    return mean_sum
-
-def check_mean_or_mode(value_sum: float, predicted_sum: int, checktype: str = None) -> bool:
-    """Checks if predicted_sum is within the allowed range of value_sum."""
-    allowance = config["mean_allowance"] * value_sum
-    lower_bound = value_sum - allowance
-    upper_bound = value_sum + allowance
-    value_pass = lower_bound <= predicted_sum <= upper_bound
-    log.debug(f"{checktype} Range: {lower_bound} to {upper_bound} // {value_pass}")
-    return value_pass
-
-def check_accuracy(values: list) -> bool:
-    """Checks if all values in the list are True."""
-    accuracy_pass = all(values)
-    log.debug(f"Accuracy Pass: {accuracy_pass}")
-    return accuracy_pass
-
-def split_data(data: pd.DataFrame, ball: int) -> typing.Tuple[pd.DataFrame, pd.Series]:
-    """Splits data into features (X) and target (y) for a given ball."""
-    try:
-        x = data.drop(["Date", f"Ball{ball}"], axis=1)
-        y = data[f"Ball{ball}"]
-        return x, y
-    except KeyError as e:
-        log.error(f"Error splitting data: {e}. Check if 'Date' or 'Ball{ball}' columns exist.")
-        raise # Re-raise the exception after logging
-
-def train_model(x: pd.DataFrame, y: pd.Series, model_name: str, model) -> typing.Tuple[object, float]:
-    """Trains a single model using cross-validation and fits it on the entire dataset."""
-    scores = cross_val_score(model, x, y, cv=5)
-    mean_score = np.mean(scores)
-    log.debug(f"Mean Cross-Validation Score for {model_name}: {mean_score}")
-
-    model.fit(x, y)
-    return model, mean_score
-
-def save_models(trained_models: list, model_filename: str):
-    """Saves the trained models to a file."""
-    try:
-        joblib.dump(trained_models, model_filename, compress=("lz4", 9))
-        log.debug(f"Models saved to {model_filename} successfully.")
-    except Exception as e:
-        log.error(f"Error saving models: {e}")
-        raise
-
-def load_models(model_filename: str) -> list:
-    """Loads trained models from a file."""
-    try:
-        trained_models = joblib.load(model_filename)
-        log.debug(f"Models loaded from {model_filename} successfully.")
-        return trained_models
-    except FileNotFoundError:
-        log.debug(f"Model file {model_filename} not found. Training new models.")
-        return None # Return None to trigger training
-    except Exception as e:
-        log.error(f"Error loading models: {e}")
-        return None
-
-def train_and_save_models(data: pd.DataFrame, ball: int, modeldir: str) -> typing.List[object]:
-    """Trains, saves, or loads pre-trained models for a given ball."""
-    modeldir = os.path.join(modeldir, "models")
-    os.makedirs(modeldir, exist_ok=True) # Create directory if it doesn't exist
-    model_filename = os.path.join(modeldir, f"model_ball{ball}.joblib")
-    log.debug(f"Model filename: {model_filename}")
-
-    trained_models = load_models(model_filename)
-
-    if trained_models is None:
-        x, y = split_data(data, ball)
-
-        models = [
-            ("RandomForest", RandomForestRegressor()),
-            ("GradientBoosting", GradientBoostingRegressor()),
-            ("ExtraTrees", ExtraTreesRegressor()),
-            ("AdaBoost", AdaBoostRegressor())
-        ]
-
-        trained_models = []
-        for name, model in models:
-            trained_model, _ = train_model(x, y, name, model)
-            trained_models.append(trained_model)
-
-        save_models(trained_models, model_filename)
-
-    return trained_models
-
-def ensure_uniqueness(values: list) -> typing.Optional[list]:
-    seen_values = set()
-    unique_values = []
-
-    # Determine the maximum ball number dynamically based on the column names in the data
-    max_ball_number = int(data.columns[-1].replace('Ball', ''))
-
-    for value in values:
-        if not np.isnan(value):  # Check if value is not NaN
-            new_value = round(value)
-
-            # If the values are less than the max range for the game. Accounts for different ball counts across games.
-            if len(unique_values) < max_ball_number:
-                while new_value in seen_values:
-                    new_value += 1
-                    if new_value > config["ball_game_range_high"]:
-                        return None  # Return None if value exceeds the upper range
-                seen_values.add(new_value)
-                unique_values.append(new_value)
-            else:  # For the extra ball (powerball, mega ball, etc)
-                if config["ball_game_extra_low"] <= new_value <= config["ball_game_extra_high"]:
-                    unique_values.append(new_value)
-                else:
-                    # If the predicted value for the extra ball outside the range, set value to none
-                    unique_values.append(None)
-    return unique_values
+            config[key] = eval(value)
+    log.debug(config)
+    return config
 
 
-def test_accuracy(x_test, y_test, models, accuracy_list: list) -> list:
-    """Calculates and appends the average R-squared score of multiple models."""
+def engineer_features(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    ball_columns = [col for col in data.columns if col.startswith("Ball")]
+    flat_numbers = data[ball_columns].values.flatten()
+    frequency = pd.Series(flat_numbers).value_counts().to_dict()
+    feature_rows = []
+    number_last_seen = {n: None for n in range(1, config["ball_game_range_high"] + 1)}
 
-    # 1. Optimized Prediction Combination:
-    all_predictions = np.array([model.predict(x_test) for model in models]) # Convert to numpy array
-    predictions = np.mean(all_predictions, axis=0) # Average predictions
+    for idx, row in data.iterrows():
+        row_features = {}
+        for col in ball_columns:
+            val = row[col]
+            row_features[f"{col}_freq"] = frequency.get(val, 0)
+            last_seen = number_last_seen.get(val)
+            row_features[f"{col}_gap"] = (idx - last_seen) if last_seen is not None else -1
+            number_last_seen[val] = idx
+        window = data.iloc[max(0, idx - 10):idx + 1][ball_columns]
+        row_features["sum"] = row[ball_columns].sum()
+        row_features["sum_zscore"] = (row[ball_columns].sum() - window.sum(axis=1).mean()) / (window.sum(axis=1).std() + 1e-6)
+        row_features["even_count"] = sum(1 for n in row[ball_columns] if n % 2 == 0)
+        row_features["odd_count"] = sum(1 for n in row[ball_columns] if n % 2 != 0)
 
-    # 2. Optimized Accuracy Calculation (using R-squared):
-    accuracy = r2_score(y_test, predictions) # Use r2_score on the averaged predictions
+        recent_draws = data[ball_columns].iloc[max(0, idx - 25):idx]
+        unique_numbers = pd.Series(recent_draws.values.flatten()).value_counts().index.tolist()
+        row_features["sampled_entropy"] = random.choice(unique_numbers) if unique_numbers else 0
 
-    accuracy_list.append(accuracy)
-    return accuracy_list
+        feature_rows.append(row_features)
+
+    feature_df = pd.DataFrame(feature_rows)
+    data = pd.concat([data.reset_index(drop=True), feature_df], axis=1)
+    return data
 
 
-def predict_and_check(gamedir: str = None):
-    log.info("-----------------------")
-    log.debug(f"Predict and Check, directory={gamedir}")
-    log.info("Predicted values:")
+def normalize_features(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    non_feature_cols = ["Date"] + [f"Ball{i}" for i in config["game_balls"]]
+    feature_cols = [col for col in data.columns if col not in non_feature_cols]
+    data[feature_cols] = data[feature_cols].fillna(data[feature_cols].mean())
+    scaler = StandardScaler()
+    data[feature_cols] = scaler.fit_transform(data[feature_cols])
+    return data
 
-    # Define the cutoff date as "relatively recent" (e.g., 3 months ago from the current date)
-    cutoff_date = datetime.now() - timedelta(days=config["timeframe_in_days"])
 
-    # Convert the "Date" column to datetime
-    data["Date"] = pd.to_datetime(data["Date"])
+def build_model():
+    base_models = [
+        ("rf", RandomForestRegressor()),
+        ("gbr", GradientBoostingRegressor()),
+        ("etr", ExtraTreesRegressor()),
+        ("abr", AdaBoostRegressor())
+    ]
+    return StackingRegressor(estimators=base_models, final_estimator=RidgeCV())
 
-    # Filter data for dates after the cutoff date
-    filtered_data = data[data["Date"] > cutoff_date]
 
-    if filtered_data.empty:
-        log.warning("No future data available for prediction.")
+def predict_and_check(gamedir: str, config: dict, data: pd.DataFrame, log):
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    prediction_path = os.path.join(gamedir, "predictions", f"{today_str}.json")
+    os.makedirs(os.path.dirname(prediction_path), exist_ok=True)
+    if os.path.exists(prediction_path):
+        log.info("Prediction already exists for today. Skipping.")
         return
 
-    # Calculate the mode of the sums
-    mode_sum = calculate_mode_of_sums()
-    mean_sum = calculate_mean_of_sums()
+    data["Date"] = pd.to_datetime(data["Date"])
+    ball_cols = [f"Ball{i}" for i in config["game_balls"]]
+    data["Sum"] = data[ball_cols].sum(axis=1)
+    mean_sum = data["Sum"].mean()
+    std_sum = data["Sum"].std()
+    mode_sum = data["Sum"].mode()[0]
 
-    # Create an empty list to store the predicted values for each ball
-    predictions_list = []
-    accuracies = []
-    ball_accuracy_bool = []
-    ball_valid_bool = []
+    log.info(f"Statistical Summary: Mean={mean_sum:.2f}, StdDev={std_sum:.2f}, ModeSum={mode_sum}")
 
-    # Train and save a separate model for each ball
+    all_predictions = []
+    runs_completed = 0
+
+    x_data = data.drop(columns=["Date"] + ball_cols + ["Sum"])
+    y_data = {ball: data[f"Ball{ball}"] for ball in config["game_balls"]}
+    expected_features = list(x_data.columns)
+
+    models = {}
     for ball in config["game_balls"]:
-        models = train_and_save_models(ball=ball, data=data, modeldir=gamedir)
-
-        # Split data into X and y
-        x = data.drop(["Date", f"Ball{ball}"], axis=1)
-        y = data[f"Ball{ball}"]
-
-        """
-        Split data into training and testing sets. Here's why:
-        Here's why:
-
-        Equal Probability: In a fair lottery system, each ball number should have an equal probability of being drawn. 
-        Therefore, there is no inherent class imbalance that needs to be addressed through stratification.
-
-        Avoiding Biases: Shuffling the data helps to ensure that the model does not inadvertently learn patterns related
-        to the order of the samples. This is particularly important in scenarios where the data may have some intrinsic 
-        ordering, such as temporal data. By shuffling the data, you remove any potential biases introduced by the 
-        ordering of samples. 
-
-        Generalization: Shuffling promotes better generalization by ensuring that the model learns 
-        to recognize patterns across the entire dataset rather than being influenced by the order in which the data was 
-        collected or recorded.
-        """
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=config["test_size"],
-                                                            train_size=config["train_size"], shuffle=True)
-
-        # Test the models and calculate accuracy
-        accuracy = np.mean([model.score(x_test, y_test) for model in models])
-        accuracies.append(accuracy)
-
-        # Make predictions
-        predictions = np.mean([model.predict(x_test) for model in models], axis=0)
-
-        # Append the predicted values to the list
-        predictions_list.append(predictions)
-
-        # Check if accuracy is below the threshold
-        accuracy_calculation = True if accuracy > config["accuracy_allowance"] else False
-        ball_accuracy_bool.append(accuracy_calculation)
-        log.debug(f"Ball{ball}: {accuracy} > {config['accuracy_allowance']} // {accuracy_calculation}")
-
-    # Convert the predictions list to a Pandas DataFrame
-    predictions_df = pd.DataFrame(predictions_list).transpose()
-
-    # Find the mode of the predicted values for each ball
-    mode_values = predictions_df.mode(axis=1)
-
-    # Ensure uniqueness for each ball
-    for ball in config["game_balls"]:
-        rounded_values = mode_values.loc[ball - 1, :].values
-
-        # Ensure uniqueness by adding a suffix if the value is repeated
-        rounded_values = ensure_uniqueness(rounded_values)
-
-        # Now, rounded_values contains unique, rounded values
-        mode_values.loc[ball - 1, :] = rounded_values
-
-    # Ensure uniqueness for the final ball prediction
-    final_mode_values = mode_values.iloc[-1, :].values
-    final_rounded_sum = ensure_uniqueness(final_mode_values)
-
-    # Print the predicted values and accuracy for each ball
-    for ball in config["game_balls"]:
-        if ball <= len(final_rounded_sum):
-            predicted_value = round(final_rounded_sum[ball - 1])
-            accuracy_percentage = round(accuracies[ball - 1] * 100, 2)
-
-            valid_range = True if predicted_value <= config["ball_game_range_high"] else False
-            ball_valid_bool.append(valid_range)
-            if predicted_value <= config["ball_game_range_high"]:
-                log.info(
-                    f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage:.2f}%\tValid Range: {valid_range}")
-            else:
-                log.warning(
-                    f"Ball{ball}: {predicted_value}\tAccuracy: {accuracy_percentage:.2f}%\tValid Range: {valid_range}")
+        model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
+        if os.path.exists(model_path):
+            model = joblib.load(model_path)
         else:
-            log.warning(f"Ball{ball}: Not enough data for prediction")
+            model = build_model()
+            x_train, _, y_train, _ = train_test_split(x_data, y_data[ball], test_size=config["test_size"])
+            model.fit(x_train, y_train)
+            joblib.dump(model, model_path)
+        models[ball] = model
 
-    # Calculate the sum of the final ball predictions for balls.
-    predicted_sum = sum(final_rounded_sum)
-    log.debug(f"Predicted Sum: {predicted_sum}")
+    while runs_completed < 10:
+        predictions = []
+        accuracies = []
+        input_vector = x_data.iloc[[-1]].copy()
+        input_vector += np.random.normal(0, 0.01, input_vector.shape)
 
-    """ Final Validation Checks """
-    mode_sum_pass = check_mean_or_mode(value_sum=mode_sum, predicted_sum=predicted_sum, checktype="Mode")
-    mean_sum_pass = check_mean_or_mode(value_sum=mean_sum, predicted_sum=predicted_sum, checktype="Mean")
-    accuracy_pass = check_accuracy(ball_accuracy_bool)
+        if any(col not in input_vector.columns for col in expected_features):
+            missing = [col for col in expected_features if col not in input_vector.columns]
+            log.error(f"Missing input features for prediction: {missing}")
+            raise ValueError("Input features do not match model training data")
 
-    """ RANGE """
-    valid_balls = True if all(ball_valid_bool) else False
-    log.debug(f"Valid range: {valid_balls}")
+        for ball in config["game_balls"]:
+            model = models[ball]
+            prediction = int(round(model.predict(input_vector)[0]))
+            prediction = max(config["ball_game_range_low"], min(prediction, config["ball_game_range_high"]))
+            score = model.score(x_data, y_data[ball])
+            predictions.append(prediction)
+            accuracies.append(score)
+            log.info(f"[Run {runs_completed+1}] Ball{ball}: {prediction}\tAccuracy: {score:.4f}")
 
-    """ FINAL CHECK """
-    if accuracy_pass and mode_sum_pass and mean_sum_pass and valid_balls:
-        log.info(f"PREDICTION.. SUCCESS!")
-    else:
-        log.error(f"PREDICTION.. FAILED")
-        predict_and_check(gamedir=gamedir)
+        predicted_sum = sum(predictions)
+        mean_pass = mean_sum * (1 - config["mean_allowance"]) <= predicted_sum <= mean_sum * (1 + config["mean_allowance"])
+        mode_pass = mode_sum * (1 - config["mode_allowance"]) <= predicted_sum <= mode_sum * (1 + config["mode_allowance"])
+        stddev_pass = (mean_sum - std_sum) <= predicted_sum <= (mean_sum + std_sum)
+        accuracy_pass = all(score > config["accuracy_allowance"] for score in accuracies)
+
+        log.debug(f"[Run {runs_completed+1}] Predicted Sum: {predicted_sum}")
+        if not mean_pass:
+            log.warning(f"[Run {runs_completed+1}] Mean check failed: predicted sum {predicted_sum} not in range {mean_sum * (1 - config['mean_allowance']):.2f}–{mean_sum * (1 + config['mean_allowance']):.2f} (mean={mean_sum:.2f})")
+        if not mode_pass:
+            log.warning(f"[Run {runs_completed+1}] Mode check failed: predicted sum {predicted_sum} not in range {mode_sum * (1 - config['mode_allowance']):.2f}–{mode_sum * (1 + config['mode_allowance']):.2f} (mode={mode_sum:.2f})")
+        if not stddev_pass:
+            log.warning(f"[Run {runs_completed+1}] StdDev check failed: predicted sum {predicted_sum} not within ±1σ ({mean_sum - std_sum:.2f}–{mean_sum + std_sum:.2f})")
+        if not accuracy_pass:
+            log.warning(f"[Run {runs_completed+1}] Accuracy check failed: not all accuracies > {config['accuracy_allowance']}")
+
+        if mean_pass and mode_pass and stddev_pass and accuracy_pass:
+            log.info("\033[1;92mPrediction SUCCESS!\033[0m")
+            all_predictions.append({
+                "run": runs_completed + 1,
+                "date": today_str,
+                "predicted": predictions,
+                "accuracy_scores": [round(score, 4) for score in accuracies],
+                "predicted_sum": predicted_sum,
+                "mean_sum": round(mean_sum, 2),
+                "mode_sum": int(mode_sum),
+                "stddev": round(std_sum, 2),
+                "pass_checks": {
+                    "accuracy": bool(accuracy_pass),
+                    "mean": bool(mean_pass),
+                    "mode": bool(mode_pass),
+                    "stddev": bool(stddev_pass)
+                }
+            })
+            log.info(f"\033[1;96m[Run {runs_completed+1}] All checks PASSED\033[0m")
+            runs_completed += 1
+        else:
+            log.warning("\033[1;91mPrediction FAILED checks. Retrying...\033[0m")
+
+    with open(prediction_path, "w") as f:
+        json.dump(all_predictions, f, indent=2)
+    log.info(f"All predictions exported to {prediction_path}")
 
 
-"""
-MAIN PROGRAM
-"""
-# Start by enabling logging
-log = configure_logging()
+if __name__ == "__main__":
+    log = configure_logging()
 
-# Define and parse command-line arguments
-parser = argparse.ArgumentParser(description='Predict lottery numbers.')
-parser.add_argument('--gamedir',
-                    help='Directory where the configurations, models, and sources are found. No trailing slash.',
-                    required=True)
-args = parser.parse_args()
-log.debug(f"Args: {args}")
+    parser = argparse.ArgumentParser(description='Predict lottery numbers.')
+    parser.add_argument('--gamedir', help='Directory where the configurations, models, and sources are found. No trailing slash.', required=True)
+    args = parser.parse_args()
+    log.debug(f"Args: {args}")
 
-# Load data
-data = load_data(gamedir=args.gamedir)
-log.debug(f"Data: {data}")
+    config = load_config(gamedir=args.gamedir)
+    config = evaluate_config(config)
+    data = load_data(gamedir=args.gamedir)
+    data = engineer_features(data, config)
+    data = normalize_features(data, config)
 
-# Load configuration from the provided file
-config = load_config(gamedir=args.gamedir)
-config = evaluate_config(configuration=config)
-""" End Configuration """
-
-# Start the prediction and checking process
-predict_and_check(gamedir=args.gamedir)
+    predict_and_check(gamedir=args.gamedir, config=config, data=data, log=log)

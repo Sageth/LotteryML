@@ -140,22 +140,42 @@ def predict_and_check(gamedir: str, config: dict, data: pd.DataFrame, log):
     while runs_completed < 10:
         predictions = []
         accuracies = []
-        input_vector = x_data.iloc[[-1]].copy()
-        input_vector += np.random.normal(0, 0.01, input_vector.shape)
+        used_numbers = set()
+        sample_window = config.get("input_sample_window", 10)
+        noise_stddev = config.get("prediction_noise_stddev", 0.05)
+        input_vector = x_data.tail(sample_window).sample(n=1, random_state=random.randint(0, 10000)).copy()
+        input_vector += np.random.normal(0, noise_stddev, input_vector.shape)
 
         if any(col not in input_vector.columns for col in expected_features):
             missing = [col for col in expected_features if col not in input_vector.columns]
             log.error(f"Missing input features for prediction: {missing}")
             raise ValueError("Input features do not match model training data")
 
+        valid = True
         for ball in config["game_balls"]:
             model = models[ball]
-            prediction = int(round(model.predict(input_vector)[0]))
-            prediction = max(config["ball_game_range_low"], min(prediction, config["ball_game_range_high"]))
-            score = model.score(x_data, y_data[ball])
-            predictions.append(prediction)
-            accuracies.append(score)
-            log.info(f"[Run {runs_completed+1}] Ball{ball}: {prediction}\tAccuracy: {score:.4f}")
+            while True:
+                prediction = int(round(model.predict(input_vector)[0]))
+                prediction = max(config["ball_game_range_low"], min(prediction, config["ball_game_range_high"]))
+
+                if config.get("no_duplicates", False) and prediction in used_numbers:
+                    log.warning(f"[Run {runs_completed+1}] Duplicate number {prediction} for Ball{ball}. Retrying run...")
+                    valid = False
+                    break
+
+                used_numbers.add(prediction)
+                predictions.append(prediction)
+                score = model.score(x_data, y_data[ball])
+                accuracies.append(score)
+                break
+            if not valid:
+                break
+
+        if not valid:
+            continue
+
+        for i, ball in enumerate(config["game_balls"]):
+            log.info(f"[Run {runs_completed+1}] Ball{ball}: {predictions[i]}\tAccuracy: {accuracies[i]:.4f}")
 
         predicted_sum = sum(predictions)
         mean_pass = mean_sum * (1 - config["mean_allowance"]) <= predicted_sum <= mean_sum * (1 + config["mean_allowance"])

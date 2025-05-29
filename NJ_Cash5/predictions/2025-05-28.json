@@ -1,0 +1,272 @@
+[
+  {
+    "run": 1,
+    "date": "2025-05-28",
+    "predicted": [
+      11,
+      13,
+      18,
+      30,
+      30
+    ],
+    "accuracy_scores": [
+      0.9737,
+      0.9904,
+      0.9814,
+      0.996,
+      0.9682
+    ],
+    "predicted_sum": 102,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 2,
+    "date": "2025-05-28",
+    "predicted": [
+      5,
+      15,
+      21,
+      24,
+      45
+    ],
+    "accuracy_scores": [
+      0.9204,
+      0.9758,
+      0.978,
+      0.995,
+      0.9639
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 3,
+    "date": "2025-05-28",
+    "predicted": [
+      4,
+      4,
+      20,
+      37,
+      40
+    ],
+    "accuracy_scores": [
+      0.9637,
+      0.9963,
+      0.9823,
+      0.9966,
+      0.9802
+    ],
+    "predicted_sum": 105,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 4,
+    "date": "2025-05-28",
+    "predicted": [
+      6,
+      8,
+      25,
+      34,
+      37
+    ],
+    "accuracy_scores": [
+      0.942,
+      0.9839,
+      0.9868,
+      0.9978,
+      0.9851
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 5,
+    "date": "2025-05-28",
+    "predicted": [
+      9,
+      12,
+      14,
+      35,
+      40
+    ],
+    "accuracy_scores": [
+      0.9144,
+      0.9943,
+      0.9741,
+      0.9961,
+      0.901
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 6,
+    "date": "2025-05-28",
+    "predicted": [
+      16,
+      18,
+      20,
+      21,
+      35
+    ],
+    "accuracy_scores": [
+      0.949,
+      0.9916,
+      0.9849,
+      0.996,
+      0.9932
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 7,
+    "date": "2025-05-28",
+    "predicted": [
+      6,
+      8,
+      17,
+      32,
+      38
+    ],
+    "accuracy_scores": [
+      0.9351,
+      0.9928,
+      0.968,
+      0.9937,
+      0.9104
+    ],
+    "predicted_sum": 101,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 8,
+    "date": "2025-05-28",
+    "predicted": [
+      5,
+      21,
+      23,
+      26,
+      35
+    ],
+    "accuracy_scores": [
+      0.9491,
+      0.9854,
+      0.987,
+      0.9967,
+      0.9852
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 9,
+    "date": "2025-05-28",
+    "predicted": [
+      9,
+      14,
+      20,
+      26,
+      37
+    ],
+    "accuracy_scores": [
+      0.9363,
+      0.9912,
+      0.9813,
+      0.9967,
+      0.9537
+    ],
+    "predicted_sum": 106,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  },
+  {
+    "run": 10,
+    "date": "2025-05-28",
+    "predicted": [
+      2,
+      5,
+      17,
+      39,
+      40
+    ],
+    "accuracy_scores": [
+      0.9358,
+      0.9918,
+      0.9716,
+      0.993,
+      0.9787
+    ],
+    "predicted_sum": 103,
+    "mean_sum": 106.39,
+    "mode_sum": 111,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "range": true
+    }
+  }
+]

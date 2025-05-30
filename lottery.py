@@ -5,6 +5,7 @@ from lib.data.io import load_data
 from lib.data.features import engineer_features
 from lib.data.normalize import normalize_features
 from lib.models.predictor import (
+    should_skip_predictions,
     prepare_statistics,
     build_models,
     generate_predictions,
@@ -18,13 +19,16 @@ def main():
     parser.add_argument('--gamedir', required=True, help='Path to game directory. No trailing slash.')
     args = parser.parse_args()
 
+    if should_skip_predictions(args.gamedir, log):
+        return
+
     config = evaluate_config(load_config(args.gamedir))
     data = load_data(args.gamedir)
-    data = engineer_features(data, config)
+    data = engineer_features(data, config, log)
     data = normalize_features(data, config)
 
     stats = prepare_statistics(data, config, log)
-    models = build_models(data, config, args.gamedir, log)
+    models = build_models(data, config, args.gamedir, stats, log)
     predictions = generate_predictions(data, config, models, stats, log)
     export_predictions(predictions, args.gamedir, log)
 

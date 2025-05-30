@@ -31,16 +31,19 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     log.info(f"Train draws: {len(train_data)}, Test draws: {len(test_data)}")
 
     # --- Prepare features ---
-    x_train = train_data.drop(columns=["Date"] + stats["ball_cols"] + ["Sum"])
-    x_test  = test_data.drop(columns=["Date"] + stats["ball_cols"] + ["Sum"])
+    sum_col = "sum" if "sum" in train_data.columns else "Sum"
+    x_train = train_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
+    x_test  = test_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
 
     models = {}
+
     for ball in config["game_balls"]:
         y_train = train_data[f"Ball{ball}"]
         y_test  = test_data[f"Ball{ball}"]
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
 
+        # --- Load or Train ---
         if os.path.exists(model_path) and not force_retrain:
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")
@@ -50,9 +53,20 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        # Evaluate model on FUTURE draws
-        test_score = model.score(x_test, y_test)
-        log.info(f"Ball{ball} test accuracy (future draws): {test_score:.4f}")
+        # --- Safe scoring with auto-retrain on feature mismatch ---
+        try:
+            test_score = model.score(x_test, y_test)
+            log.info(f"Ball{ball} test accuracy (future draws): {test_score:.4f}")
+        except ValueError as e:
+            log.warning(f"Feature mismatch detected for Ball{ball}: {e}. Forcing retrain...")
+            model = builder.build_model()
+            model.fit(x_train, y_train)
+            joblib.dump(model, model_path)
+            log.info(f"Ball{ball} retrained and saved due to feature mismatch.")
+
+            # Retry scoring after retrain
+            test_score = model.score(x_test, y_test)
+            log.info(f"Ball{ball} retrained test accuracy: {test_score:.4f}")
 
         models[ball] = model
 

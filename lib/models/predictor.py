@@ -11,10 +11,10 @@ def prepare_statistics(data: pd.DataFrame, config: dict, log):
     data = data.copy()  # Prevent SettingWithCopyWarning
     data["Date"] = pd.to_datetime(data["Date"])
     ball_cols = [f"Ball{i}" for i in config["game_balls"]]
-    data["Sum"] = data[ball_cols].sum(axis=1)
-    mean_sum = data["Sum"].mean()
-    std_sum = data["Sum"].std()
-    mode_sum = data["Sum"].mode()[0]
+    data["sum"] = data[ball_cols].sum(axis=1)  # <-- lowercase 'sum'
+    mean_sum = data["sum"].mean()
+    std_sum = data["sum"].std()
+    mode_sum = data["sum"].mode()[0]
     log.info(f"Statistical Summary: Mean={mean_sum:.2f}, StdDev={std_sum:.2f}, ModeSum={mode_sum}")
     return {"mean": mean_sum, "std": std_sum, "mode": mode_sum, "ball_cols": ball_cols}
 
@@ -31,7 +31,7 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     log.info(f"Train draws: {len(train_data)}, Test draws: {len(test_data)}")
 
     # --- Prepare features ---
-    sum_col = "sum" if "sum" in train_data.columns else "Sum"
+    sum_col = "sum"  # Always lowercase after normalize
     x_train = train_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
     x_test  = test_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
 
@@ -53,34 +53,38 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        # --- Safe scoring with auto-retrain on feature mismatch ---
-        try:
-            test_score = model.score(x_test, y_test)
-            log.info(f"Ball{ball} test accuracy (future draws): {test_score:.4f}")
-        except ValueError as e:
-            log.warning(f"Feature mismatch detected for Ball{ball}: {e}. Forcing retrain...")
+        # Evaluate model on FUTURE draws — safe feature check!
+        if hasattr(model, "feature_names_in_"):
+            try:
+                test_score = model.score(x_test, y_test)
+            except ValueError as e:
+                log.warning(f"Feature mismatch detected for Ball{ball}: {e}. Forcing retrain...")
+                model = builder.build_model()
+                model.fit(x_train, y_train)
+                joblib.dump(model, model_path)
+                test_score = model.score(x_test, y_test)
+        else:
+            # fallback for older/simple models
+            log.warning(f"Model for Ball{ball} lacks feature_names_in_; forcing retrain...")
             model = builder.build_model()
             model.fit(x_train, y_train)
             joblib.dump(model, model_path)
-            log.info(f"Ball{ball} retrained and saved due to feature mismatch.")
-
-            # Retry scoring after retrain
             test_score = model.score(x_test, y_test)
-            log.info(f"Ball{ball} retrained test accuracy: {test_score:.4f}")
+
+        log.info(f"Ball{ball} test accuracy (future draws): {test_score:.4f}")
 
         models[ball] = model
 
     return models
 
 def generate_predictions(data, config, models, stats, log, test_mode=False):
-    x_data = data.drop(columns=["Date"] + stats["ball_cols"] + ["Sum"])
+    x_data = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
     y_data = {ball: data[f"Ball{ball}"] for ball in config["game_balls"]}
     expected_features = list(x_data.columns)
     all_predictions = []
     runs_completed = 0
     today_str = datetime.now().strftime('%Y-%m-%d')
 
-    # NEW: max_runs is now configurable (defaults to 10)
     max_runs = config.get("test_prediction_runs", 10)
 
     while runs_completed < max_runs:
@@ -125,10 +129,8 @@ def generate_predictions(data, config, models, stats, log, test_mode=False):
         predicted_sum = sum(predictions)
 
         if test_mode:
-            # In test mode, force all checks to pass — prevents hangs
             mean_pass = mode_pass = stddev_pass = accuracy_pass = True
         else:
-            # Production checks
             mean_pass = stats["mean"] * (1 - config["mean_allowance"]) <= predicted_sum <= stats["mean"] * (1 + config["mean_allowance"])
             mode_pass = stats["mode"] * (1 - config["mode_allowance"]) <= predicted_sum <= stats["mode"] * (1 + config["mode_allowance"])
             stddev_pass = (stats["mean"] - stats["std"]) <= predicted_sum <= (stats["mean"] + stats["std"])
@@ -155,11 +157,9 @@ def generate_predictions(data, config, models, stats, log, test_mode=False):
             runs_completed += 1
         else:
             log.warning(f"\033[1;91mPrediction FAILED checks. Retrying...\033[0m")
-
-            # 🚀 NEW: If in test_mode, break loop early to prevent hang!
             if test_mode:
                 log.warning("Test mode enabled — skipping retry loop to prevent hang.")
-                runs_completed += 1  # still count it
+                runs_completed += 1
 
     return all_predictions
 

@@ -36,12 +36,14 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     x_test  = test_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
 
     models = {}
+
     for ball in config["game_balls"]:
         y_train = train_data[f"Ball{ball}"]
         y_test  = test_data[f"Ball{ball}"]
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
 
+        # --- Load or Train ---
         if os.path.exists(model_path) and not force_retrain:
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")

@@ -25,10 +25,10 @@ def main():
     config = evaluate_config(load_config(args.gamedir))
     data = load_data(args.gamedir)
     data = engineer_features(data, config, log)
-    data = normalize_features(data, config)
-
+    data = normalize_features(data, config)   # add this
     stats = prepare_statistics(data, config, log)
     models = build_models(data, config, args.gamedir, stats, log)
+
     predictions = generate_predictions(data, config, models, stats, log)
     export_predictions(predictions, args.gamedir, log)
 

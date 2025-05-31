@@ -65,11 +65,22 @@ def test_model_persistence():
         models_after[ball] = joblib.load(model_path)
 
     # Verify predictions match after reload!
-    sample_input = data.drop(columns=["Date"] + stats["ball_cols"] + ["Sum"]).head(1)
+    sum_col = "sum"
+    sample_input = data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col]).head(1)
 
     for ball in config["game_balls"]:
-        pred_before = models_before[ball].predict(sample_input)[0]
-        pred_after  = models_after[ball].predict(sample_input)[0]
+        model_before = models_before[ball]
+        model_after  = models_after[ball]
+
+        # If feature_names_in_ present, validate feature alignment
+        if hasattr(model_before, "feature_names_in_"):
+            assert list(model_before.feature_names_in_) == list(sample_input.columns), f"Feature mismatch in model_before for Ball{ball}!"
+        if hasattr(model_after, "feature_names_in_"):
+            assert list(model_after.feature_names_in_) == list(sample_input.columns), f"Feature mismatch in model_after for Ball{ball}!"
+
+        # Predict
+        pred_before = model_before.predict(sample_input)[0]
+        pred_after  = model_after.predict(sample_input)[0]
 
         diff = abs(pred_before - pred_after)
         print(f"Ball{ball}: before={pred_before:.4f}, after={pred_after:.4f}, diff={diff:.6f}")

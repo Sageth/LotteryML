@@ -36,7 +36,7 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             number_last_seen[val] = idx
 
         window = data.iloc[max(0, idx - 10):idx + 1][ball_columns]
-        row_features["Sum"] = row[ball_columns].sum()
+        row_features["sum"] = row[ball_columns].sum()
         row_features["sum_zscore"] = (row[ball_columns].sum() - window.sum(axis=1).mean()) / (window.sum(axis=1).std() + 1e-6)
         row_features["even_count"] = sum(1 for n in row[ball_columns] if n % 2 == 0)
         row_features["odd_count"] = sum(1 for n in row[ball_columns] if n % 2 != 0)

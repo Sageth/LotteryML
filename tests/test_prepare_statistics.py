@@ -8,13 +8,21 @@ from lib.models.predictor import prepare_statistics
 def test_prepare_statistics_basic():
     # Create dummy data
     dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
-    data = pd.DataFrame({"Date": dates, "Ball1": [5, 10, 15, 20, 25, 30, 35, 40, 45, 46],
-        "Ball2": [4, 9, 14, 19, 24, 29, 34, 39, 44, 45], "Ball3": [3, 8, 13, 18, 23, 28, 33, 38, 43, 44],
-        "Ball4": [2, 7, 12, 17, 22, 27, 32, 37, 42, 43], "Ball5": [1, 6, 11, 16, 21, 26, 31, 36, 41, 42],
+    data = pd.DataFrame({
+        "Date": dates,
+        "Ball1": [5, 10, 15, 20, 25, 30, 35, 40, 45, 46],
+        "Ball2": [4, 9, 14, 19, 24, 29, 34, 39, 44, 45],
+        "Ball3": [3, 8, 13, 18, 23, 28, 33, 38, 43, 44],
+        "Ball4": [2, 7, 12, 17, 22, 27, 32, 37, 42, 43],
+        "Ball5": [1, 6, 11, 16, 21, 26, 31, 36, 41, 42],
         "Ball6": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]})
 
     # Dummy config
-    config = {"game_balls": [1, 2, 3, 4, 5, 6]}
+    config = {
+        "game_balls": [1, 2, 3, 4, 5, 6],
+        "ball_game_range_low": 1,
+        "ball_game_range_high": 49
+    }
 
     # Dummy logger
     class DummyLog:

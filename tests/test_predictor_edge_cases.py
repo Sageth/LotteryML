@@ -4,14 +4,31 @@ import tempfile
 
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 import lib.models.builder as builder
 from lib.config.loader import load_config, evaluate_config
 from lib.data.features import engineer_features
 from lib.data.normalize import normalize_features
-from lib.models.predictor import prepare_statistics, build_models, generate_predictions, export_predictions, should_skip_predictions
+from lib.models.predictor import prepare_statistics, build_models, generate_predictions, export_predictions, \
+    should_skip_predictions
 
+class SimpleModel:
+    def fit(self, X, y): pass
+    def predict(self, X): return np.ones(len(X))
+    def score(self, X, y): return 1.0
+
+class DuplicateModel:
+    def __init__(self, value):
+        self.value = value
+
+    def fit(self, X, y): pass
+
+    def predict(self, X):
+        return np.array([self.value])
+
+    def score(self, X, y): return 1.0  # <--- REQUIRED because build_models calls model.score()
 
 def test_predictor_pipeline_small_data():
     # Load real config
@@ -243,45 +260,6 @@ def test_generate_predictions_duplicate_retry():
     _ = generate_predictions(data, config, models, stats, log, test_mode=True)
 
 
-def test_generate_predictions_duplicate_retry():
-    config = evaluate_config(load_config("NJ_Pick6"))
-
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
-    data = pd.DataFrame({"Date": dates})
-    for i in config["game_balls"]:
-        data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(100)])
-
-    class DummyLog:
-        def info(self, msg): print(msg)
-
-        def warning(self, msg): print(msg)
-
-        def error(self, msg): print(msg)
-
-    log = DummyLog()
-
-    builder.build_model = lambda: LinearRegression()
-
-    config["test_prediction_runs"] = 1
-    config["accuracy_allowance"] = -1.0
-    config["no_duplicates"] = True  # force duplicates check
-    force_retrain = True
-
-    if os.path.exists(config["model_save_path"]):
-        shutil.rmtree(config["model_save_path"])
-    os.makedirs(config["model_save_path"], exist_ok=True)
-
-    data = engineer_features(data, config, log)
-    data = normalize_features(data, config)
-    stats = prepare_statistics(data, config, log)
-
-    models = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
-
-    # Run generate_predictions with no_duplicates on
-    _ = generate_predictions(data, config, models, stats, log, test_mode=True)
-
-
 def test_generate_predictions_test_mode_skip_retry():
     config = evaluate_config(load_config("NJ_Pick6"))
 
@@ -341,6 +319,7 @@ def test_export_predictions_creates_file():
         files = glob.glob(f"{tmpdir}/predictions/*.json")
         assert len(files) == 1
 
+
 def test_should_skip_predictions_true_and_false():
     import tempfile
     import os
@@ -355,7 +334,9 @@ def test_should_skip_predictions_true_and_false():
 
         class DummyLog:
             def info(self, msg): print(msg)
+
             def warning(self, msg): print(msg)
+
             def error(self, msg): print(msg)
 
         log = DummyLog()
@@ -371,3 +352,107 @@ def test_should_skip_predictions_true_and_false():
         # Second call — file exists — should return True
         result = should_skip_predictions(tmpdir, log)
         assert result == True
+
+
+def test_predictor_fallback_no_feature_names():
+    config = evaluate_config(load_config("NJ_Pick6"))
+
+    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    data = pd.DataFrame({"Date": dates})
+    for i in config["game_balls"]:
+        data[f"Ball{i}"] = pd.Series(
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+
+    class DummyLog:
+        def info(self, msg): print(msg)
+
+        def warning(self, msg): print(msg)
+
+        def error(self, msg): print(msg)
+
+    log = DummyLog()
+
+    builder.build_model = lambda: SimpleModel()
+
+    config["test_prediction_runs"] = 1
+    config["accuracy_allowance"] = -1.0
+    force_retrain = True
+
+    data = engineer_features(data, config, log)
+    data = normalize_features(data, config)
+    stats = prepare_statistics(data, config, log)
+
+    models = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
+    assert models is not None
+
+
+def test_predictor_retry_duplicate_numbers():
+    config = evaluate_config(load_config("NJ_Pick6"))
+
+    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    data = pd.DataFrame({"Date": dates})
+    for i in config["game_balls"]:
+        data[f"Ball{i}"] = pd.Series(
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+
+    # NEW — use enough distinct values
+    values = iter([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    builder.build_model = lambda: DuplicateModel(next(values))
+
+    config["test_prediction_runs"] = 1
+    config["accuracy_allowance"] = -1.0
+    config["no_duplicates"] = True  # Force retry logic
+
+    class DummyLog:
+        def info(self, msg): print(msg)
+
+        def warning(self, msg): print(msg)
+
+        def error(self, msg): print(msg)
+
+    log = DummyLog()
+
+    data = engineer_features(data, config, log)
+    data = normalize_features(data, config)
+    stats = prepare_statistics(data, config, log)
+    models = build_models(data, config, ".", stats, log, force_retrain=True)
+
+    # Run generate_predictions in test_mode to prevent hang
+    predictions = generate_predictions(data, config, models, stats, log, test_mode=True)
+    assert predictions is not None
+
+
+def test_generate_predictions_missing_columns_error():
+    config = evaluate_config(load_config("NJ_Pick6"))
+
+    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    data = pd.DataFrame({"Date": dates})
+    for i in config["game_balls"]:
+        data[f"Ball{i}"] = pd.Series(
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+
+    class DummyLog:
+        def info(self, msg): print(msg)
+
+        def warning(self, msg): print(msg)
+
+        def error(self, msg): print(msg)
+
+    log = DummyLog()
+
+    builder.build_model = lambda: LinearRegression()
+
+    config["test_prediction_runs"] = 1
+    config["accuracy_allowance"] = -1.0
+    force_retrain = True
+
+    data = engineer_features(data, config, log)
+    data = normalize_features(data, config)
+    stats = prepare_statistics(data, config, log)
+    models = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
+
+    # Intentionally remove a feature column!
+    bad_data = data.drop(columns=data.columns[-1])  # remove last column
+
+    with pytest.raises(ValueError, match="The feature names should match those that were passed during fit."):
+        generate_predictions(bad_data, config, models, stats, log)

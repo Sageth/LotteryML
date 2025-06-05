@@ -8,6 +8,8 @@ from datetime import datetime
 import lib.models.builder as builder
 
 def prepare_statistics(data: pd.DataFrame, config: dict, log):
+    if config.get("ball_game_range_low", None) is None:
+        raise ValueError("Missing 'ball_game_range_low' in config!")
     data = data.copy()  # Prevent SettingWithCopyWarning
     data["Date"] = pd.to_datetime(data["Date"])
 

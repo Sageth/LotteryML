@@ -1,11 +1,11 @@
 {
-    "accuracy_allowance": 0.80,
+    "accuracy_allowance": 0.88,
     "ball_game_range_low": 1,
     "ball_game_range_high": 60,
     "mode_allowance": 0.10,
     "mean_allowance": 0.05,
     "model_save_path": "models",
-    "game_balls": "range(1, 7)",
+    "game_balls": "range(1, 6)",
     "game_has_extra": true,
     "game_extra_name": "CashBall",
     "game_extra_col": "BallExtra",

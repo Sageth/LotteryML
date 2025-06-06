@@ -19,6 +19,7 @@ def test_feature_engineering_range():
     config = {
         "game_balls": [1, 2, 3, 4, 5, 6],
         "ball_game_range_high": 49,
+        "ball_game_range_low": 1,
     }
 
     class DummyLog:

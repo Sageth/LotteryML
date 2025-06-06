@@ -17,7 +17,15 @@ def main():
 
     parser = argparse.ArgumentParser(description='Predict lottery numbers.')
     parser.add_argument('--gamedir', required=True, help='Path to game directory. No trailing slash.')
+    parser.add_argument("--report-accuracy", action="store_true", help="Generate live accuracy report only")
+
     args = parser.parse_args()
+
+    if args.report_accuracy:
+        log.info("📊 Running live accuracy report...")
+        from lib.models.accuracy import report_live_accuracy_all
+        report_live_accuracy_all(args.gamedir, log)
+        return
 
     if should_skip_predictions(args.gamedir, log):
         return

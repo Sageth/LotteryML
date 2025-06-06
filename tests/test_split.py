@@ -22,6 +22,7 @@ def test_time_split():
     # Dummy config
     config = {
         "game_balls": [1, 2, 3, 4, 5, 6],
+        "ball_game_range_low": 1,
         "ball_game_range_high": 49,
         "model_save_path": "test_models",
         "train_ratio": 0.8,
@@ -57,3 +58,6 @@ def test_time_split():
 
     # Optional: cleanup test dir after test
     shutil.rmtree(config["model_save_path"])
+
+# test_predictor_edge_cases.py
+

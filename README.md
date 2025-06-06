@@ -1,33 +1,31 @@
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
 # Machine Learning Lottery
 
 ## Purpose
-Have fun. Maybe win something along the way. Maybe not. 
-
-## Disclaimer
-There is no guarantee that you will win anything and this code is a personal learning experiment. You may lose a lot of
-real money using this script to play the lottery. There is no warranty and the code is provided AS-IS. Play at your 
-own risk. If this works and you win, consider yourself extremely lucky.
+Have fun exploring statistical modeling. Maybe win something. Probably not — and that's okay.
 
 ### Set up
 I strongly recommend using pipenv. Once you've created your virtual environment, just do `pipenv sync`.
-
-If you prefer to do it the long way, your best bet is to look at the import statements. As a convenience, I will try
-to keep this list updated. You will need to install the following.
-- `colorlog`
-- `lz4`
-- `numpy`
-- `pandas`
-- `scipy`
-- `scikit-learn`
 
 ### How to run
 Go to the main directory and run `python lottery.py --gamedir <GAMEDIRECTORY>`. 
 
 The argument `GAMEDIRECTORY` is a case-sensitive value of the game that you want to run. For example:
-`python lottery.py --gamedir NJ_Pick6`. Please note that not all games are fully working yet.
+
+```shell
+python lottery.py --gamedir NJ_Pick6
+```
+
+If you have been running predictions and want to test the accuracy of your predictions against real game data:
+```shell
+python lottery.py --gamedir=NJ_Cash4Life --report-accuracy
+```
 
 ### Config
-`accuracy_allowance`: The model accuracy must be above this, in decimal. (.05 = 5%)
+`accuracy_allowance`: Minimum model R² accuracy required to accept predictions. Expressed as a decimal (e.g. 0.05 = 5%).
 
 `ball_game_range_low`: This is the lowest number of the main game
 
@@ -51,16 +49,6 @@ The argument `GAMEDIRECTORY` is a case-sensitive value of the game that you want
 
 `timeframe_in_days`: Limits the number of days it looks back. e.g. if the game rules change. Defaults to 60 years.
 
-
-### Notes
-- Focus right now is on NJ Pick 6 and Cash 5 because they have straight numbers, nothing duplicated. 
-- Testing various ways. 
-- Good luck.
-
-### Methodology
-- Validate that the sum of the predicted numbers is within x% of the mode of the most common sum of winning numbers.
-- This would make more sense if I graphed it out. Maybe, again, one day.
-
 ---
 
 ## Troubleshooting
@@ -72,3 +60,128 @@ version x.y.z.post1 when using version a.b.c. This might lead to breaking code o
 Solution: Delete the `*.joblib` files in the `models` directory and rerun. The files will be regenerated.
 
 ---
+
+
+# Roadmap
+
+## Features
+- [x] Supports multiple game types
+- [x] 90%+ Test coverage
+- [x] Per-game configuration
+- [x] Generates models based on source data
+- [x] Regenerates models if outdated
+- [x] Records predictions per day (10 draws)
+- [x] Checks accuracy of recorded predictions against real game data
+
+## Upgrade Models
+
+**Goal:** Move beyond linear models to nonlinear / ensemble models
+
+Planned:
+
+- [ ] Add XGBoost builder option
+- [ ] Add LightGBM builder option
+- [ ] Add RandomForest builder option
+- [ ] Config switch to choose model per game
+
+---
+
+## Add Time-based Features
+
+**Goal:** Capture evolving patterns and trends
+
+Features to add:
+
+- [ ] Rolling average frequency (N past draws)
+- [ ] Rolling ball gaps (windowed)
+- [ ] Rolling entropy
+- [ ] Fourier / seasonal terms
+- [ ] Recent draw "momentum" indicator
+
+---
+
+## Add features
+
+**Goal:** Capture deeper structure
+
+Ideas:
+
+- [ ] Draw clustering (k-means, DBSCAN)
+- [ ] PCA components (latent trends)
+- [ ] Cross-game learning (multi-game patterns)
+- [ ] Game change point detection (detect when game rules shift)
+
+---
+
+## Improve Model Training
+
+**Goal:** Tune for performance
+
+Planned:
+
+- [ ] Integrate Optuna / Hyperopt hyperparameter tuning
+- [ ] Implement rolling-forward CV
+- [ ] Add validation/test split options
+- [ ] Per-ball tuning
+
+---
+
+## Ensembling
+
+**Goal:** Model dependencies between balls
+
+Ideas:
+
+- [ ] Ensemble multiple models per ball
+- [ ] Meta-predictor across runs
+- [ ] Correlation modeling (balls are not strictly independent)
+
+---
+
+## Reporting & UX
+
+Planned:
+
+- [ ] Accuracy trend over time (plot)
+- [ ] Per-ball accuracy heatmaps
+- [ ] Confidence intervals on predictions
+- [ ] CLI option to show "top X% most likely balls"
+
+---
+
+## Bonus Ideas
+
+- [X] Support for 2D ball games (Powerball / Mega Millions → main + special balls)
+- [ ] "Smart wheel" generator to optimize plays for coverage
+
+---
+
+## License
+
+LotteryML is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+You are free to:
+
+✅ Use this code for personal and commercial purposes  
+✅ Modify the code  
+✅ Distribute copies  
+
+However:
+
+❗ If you modify and run this code as part of a **public service** (API, web app, hosted platform), you must also release the source code of your modifications under AGPL-3.0.
+
+See [LICENSE.md](LICENSE) for full terms.
+
+This license was chosen to encourage open collaboration and ensure that improvements remain available to the community.
+
+---
+## Disclaimer
+There is no guarantee that you will win anything and this code is a personal learning experiment. You may lose real 
+money using this script to play the lottery. There is no warranty and the code is provided AS-IS. Play at your own risk,
+discretion, and cost. If this works and you win, consider yourself extremely lucky.
+
+LotteryML is an open exploration of statistical modeling for inherently random games.**
+
+The lottery is not solvable — the purpose is to explore statistical edges, entropy reduction, and better feature engineering.
+
+Gambling problem? Call 1-800-GAMBLER (https://www.1800gambler.net/)

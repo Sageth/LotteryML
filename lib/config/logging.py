@@ -2,7 +2,7 @@ import logging
 from lib.config.custom_formatter import CustomFormatter  # Correct import
 
 def configure_logging():
-    log_level = logging.DEBUG
+    log_level = logging.INFO
     handler = logging.StreamHandler()
     handler.setLevel(log_level)
     handler.setFormatter(CustomFormatter())

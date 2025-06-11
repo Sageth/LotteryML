@@ -2,15 +2,21 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 def normalize_features(data, config):
-    feature_cols = [col for col in data.columns if col not in ["Date"] + [f"Ball{i}" for i in config["game_balls"]]]
+    skip_cols = ["Date"] + [f"Ball{i}" for i in config["game_balls"]]
+
+    # Also skip extra ball if present
+    if "game_balls_extra_low" in config and "game_balls_extra_high" in config:
+        skip_cols.append("BallExtra")
+
+    feature_cols = [col for col in data.columns if col not in skip_cols]
 
     # Fill NaNs first
     data[feature_cols] = data[feature_cols].fillna(data[feature_cols].mean())
 
-    # Then normalize to mean=0, std=1
+    # Then normalize
     data[feature_cols] = (data[feature_cols] - data[feature_cols].mean()) / data[feature_cols].std()
 
-    # FINAL safety: fill NaNs (can happen if std==0 or missing data)
+    # Fill again just in case
     data[feature_cols] = data[feature_cols].fillna(0)
 
     return data

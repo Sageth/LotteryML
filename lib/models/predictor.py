@@ -95,6 +95,8 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     # --- Optional Extra ball ---
     if "game_balls_extra_low" in config and "game_balls_extra_high" in config:
         y_train = train_data["BallExtra"]
+        log.info(f"BallExtra class distribution: {y_train.value_counts().to_dict()}")
+
         y_test  = test_data["BallExtra"]
 
         model_path = os.path.join(gamedir, config["model_save_path"], "BallExtra.joblib")
@@ -194,6 +196,14 @@ def generate_predictions(data, config, models, stats, log, test_mode=False):
         # --- Predict BallExtra if exists ---
         if has_extra:
             model = models["extra"]
+            if hasattr(model, "predict_proba"):
+                try:
+                    proba = model.predict_proba(input_vector)[0]
+                    log.debug(f"🔍 BallExtra predict_proba: {proba}")
+                    log.debug(f"🔍 BallExtra model classes_: {model.classes_}")
+                except Exception as e:
+                    log.warning(f"Could not compute predict_proba for BallExtra: {e}")
+
             while True:
                 prediction = int(round(model.predict(input_vector)[0]))
                 prediction = max(config["game_balls_extra_low"], min(prediction, config["game_balls_extra_high"]))

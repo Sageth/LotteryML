@@ -11,7 +11,7 @@
     "game_extra_name": "MegaBall",
     "game_extra_col": "BallExtra",
     "game_balls_extra_low": 1,
-    "game_balls_extra_high": 25,
+    "game_balls_extra_high": 24,
     "test_size": 0.20,
     "train_size": 0.80,
     "timeframe_in_days": 21900

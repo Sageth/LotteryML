@@ -4,6 +4,51 @@ import json
 import pandas as pd
 from lib.config.loader import load_config, evaluate_config
 from lib.data.io import load_data
+import logging
+from pathlib import Path
+from datetime import datetime
+import json
+import csv
+
+logger = logging.getLogger(__name__)
+
+def load_draw_dates(game_dir: str) -> set:
+    draw_dates = set()
+    src_file = Path("src") / f"{game_dir}.csv"
+
+    if not src_file.exists():
+        raise FileNotFoundError(f"❌ Missing results file: {src_file}")
+
+    with src_file.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                date = datetime.strptime(row["DrawDate"], "%Y-%m-%d").date()
+                draw_dates.add(date)
+            except Exception as e:
+                logger.warning(f"⚠️ Skipping invalid row in {src_file}: {row} — {e}")
+
+    return draw_dates
+
+def load_actual_results(game_dir: str) -> dict:
+    """Loads actual results from src/{game_dir}.csv into a dict keyed by date."""
+    results = {}
+    src_file = Path("src") / f"{game_dir}.csv"
+
+    if not src_file.exists():
+        raise FileNotFoundError(f"❌ Missing results file: {src_file}")
+
+    with src_file.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                date = datetime.strptime(row["DrawDate"], "%Y-%m-%d").date()
+                numbers = [int(n) for n in row["Numbers"].split()]
+                results[date] = numbers
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to parse row in {src_file}: {row} — {e}")
+
+    return results
 
 def report_live_accuracy_all(gamedir, log):
     # Load config & actual game data
@@ -24,9 +69,27 @@ def report_live_accuracy_all(gamedir, log):
 
     log.info(f"🎯 Reporting live accuracy for {len(pred_files)} prediction files...")
 
-    # --- First process all results ---
+    # --- First process only valid-draw-date predictions ---
     results = []
+    valid_draw_dates = set(df["Date"])
+
     for pred_file in pred_files:
+        filename = os.path.basename(pred_file)
+        try:
+            # Expecting format: predict-YYYY-MM-DD.json or YYYY-MM-DD.json
+            if filename.startswith("predict-"):
+                date_str = filename.replace("predict-", "").replace(".json", "")
+            else:
+                date_str = filename.replace(".json", "")
+
+            if date_str not in valid_draw_dates:
+                log.debug(f"📅 Skipping non-draw day: {date_str}")
+                continue
+
+        except Exception as e:
+            log.warning(f"⚠️ Could not parse date from {filename}: {e}")
+            continue
+
         result = report_live_accuracy(gamedir, log, config, df, pred_file)
         results.append(result)
 

@@ -1,10 +1,12 @@
 #! /bin/bash
 
-GIT_DIR=$(echo $PWD)
+GIT_DIR=/path/to/git/repo/LotteryML
 VENV_DIR=$(pipenv --venv)/bin
 CURRENT_DAY=$(date +%A)
 
 cd $GIT_DIR
+
+# Optional. Only if you're creating predictions
 git checkout predictions
 
 find $GIT_DIR -name "*.joblib" -delete
@@ -39,7 +41,7 @@ elif [ "$CURRENT_DAY" == "Saturday" ]; then
   $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Pick6
   $VENV_DIR/python $GIT_DIR/lottery.py --gamedir Powerball
 else
-  echo "Error"
+  echo "$(date +%Y-%m-%d %T): Error" 2> ~/Documents/lottery-error.log
 fi
 
 exit

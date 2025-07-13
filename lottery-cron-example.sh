@@ -1,7 +1,7 @@
 #! /bin/bash
 
-GIT_DIR=/path/to/git/repo/for/LotteryML
-VENV_DIR=/home/$USER/.local/share/virtualenvs/LotteryML-glbtLDmB/bin
+GIT_DIR=$(echo $PWD)
+VENV_DIR=$(pipenv --venv)/bin
 CURRENT_DAY=$(date +%A)
 
 cd $GIT_DIR

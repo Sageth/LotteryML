@@ -6,4 +6,4 @@
 **/htmlcov/
 **/.coverage
 **/.run/
-
+lottery-cron.sh

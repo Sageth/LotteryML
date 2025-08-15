@@ -3,17 +3,17 @@
     "run": 1,
     "date": "2025-08-14",
     "predicted": [
-      10,
-      13,
+      7,
+      9,
+      29,
       25,
-      22,
       40
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
     "predicted_sum": 110,
@@ -27,10 +27,10 @@
       "stddev": true
     },
     "predicted_main": [
-      10,
-      13,
-      25,
-      22
+      7,
+      9,
+      29,
+      25
     ],
     "predicted_extra": [
       40
@@ -40,54 +40,17 @@
     "run": 2,
     "date": "2025-08-14",
     "predicted": [
-      11,
-      13,
-      23,
-      33,
-      26
+      6,
+      15,
+      25,
+      22,
+      39
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
-      0.9742
-    ],
-    "predicted_sum": 106,
-    "mean_sum": 105.63,
-    "mode_sum": 111,
-    "stddev": 26.07,
-    "pass_checks": {
-      "accuracy": true,
-      "mean": true,
-      "mode": true,
-      "stddev": true
-    },
-    "predicted_main": [
-      11,
-      13,
-      23,
-      33
-    ],
-    "predicted_extra": [
-      26
-    ]
-  },
-  {
-    "run": 3,
-    "date": "2025-08-14",
-    "predicted": [
-      11,
-      13,
-      23,
-      33,
-      27
-    ],
-    "accuracy_scores": [
-      0.9188,
-      0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
     "predicted_sum": 107,
@@ -101,33 +64,33 @@
       "stddev": true
     },
     "predicted_main": [
-      11,
-      13,
-      23,
-      33
+      6,
+      15,
+      25,
+      22
     ],
     "predicted_extra": [
-      27
+      39
     ]
   },
   {
-    "run": 4,
+    "run": 3,
     "date": "2025-08-14",
     "predicted": [
-      7,
-      19,
-      15,
-      25,
-      40
+      13,
+      6,
+      31,
+      32,
+      25
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
-    "predicted_sum": 106,
+    "predicted_sum": 107,
     "mean_sum": 105.63,
     "mode_sum": 111,
     "stddev": 26.07,
@@ -138,30 +101,67 @@
       "stddev": true
     },
     "predicted_main": [
-      7,
-      19,
-      15,
-      25
+      13,
+      6,
+      31,
+      32
     ],
     "predicted_extra": [
-      40
+      25
+    ]
+  },
+  {
+    "run": 4,
+    "date": "2025-08-14",
+    "predicted": [
+      13,
+      8,
+      31,
+      32,
+      26
+    ],
+    "accuracy_scores": [
+      0.9186,
+      0.9156,
+      0.9261,
+      0.9323,
+      0.9742
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      13,
+      8,
+      31,
+      32
+    ],
+    "predicted_extra": [
+      26
     ]
   },
   {
     "run": 5,
     "date": "2025-08-14",
     "predicted": [
-      7,
-      19,
-      16,
-      26,
-      40
+      13,
+      5,
+      31,
+      34,
+      25
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
     "predicted_sum": 108,
@@ -175,33 +175,33 @@
       "stddev": true
     },
     "predicted_main": [
-      7,
-      19,
-      16,
-      26
+      13,
+      5,
+      31,
+      34
     ],
     "predicted_extra": [
-      40
+      25
     ]
   },
   {
     "run": 6,
     "date": "2025-08-14",
     "predicted": [
-      11,
-      13,
-      23,
-      32,
-      24
+      9,
+      7,
+      29,
+      26,
+      39
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
-    "predicted_sum": 103,
+    "predicted_sum": 110,
     "mean_sum": 105.63,
     "mode_sum": 111,
     "stddev": 26.07,
@@ -212,30 +212,67 @@
       "stddev": true
     },
     "predicted_main": [
-      11,
-      13,
-      23,
-      32
+      9,
+      7,
+      29,
+      26
     ],
     "predicted_extra": [
-      24
+      39
     ]
   },
   {
     "run": 7,
     "date": "2025-08-14",
     "predicted": [
-      2,
       7,
-      31,
-      33,
-      32
+      10,
+      29,
+      24,
+      39
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
+      0.9742
+    ],
+    "predicted_sum": 109,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      7,
+      10,
+      29,
+      24
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 8,
+    "date": "2025-08-14",
+    "predicted": [
+      12,
+      13,
+      17,
+      24,
+      39
+    ],
+    "accuracy_scores": [
+      0.9186,
+      0.9156,
+      0.9261,
+      0.9323,
       0.9742
     ],
     "predicted_sum": 105,
@@ -249,47 +286,10 @@
       "stddev": true
     },
     "predicted_main": [
-      2,
-      7,
-      31,
-      33
-    ],
-    "predicted_extra": [
-      32
-    ]
-  },
-  {
-    "run": 8,
-    "date": "2025-08-14",
-    "predicted": [
-      9,
-      11,
+      12,
       13,
-      29,
-      39
-    ],
-    "accuracy_scores": [
-      0.9188,
-      0.9156,
-      0.9262,
-      0.9321,
-      0.9742
-    ],
-    "predicted_sum": 101,
-    "mean_sum": 105.63,
-    "mode_sum": 111,
-    "stddev": 26.07,
-    "pass_checks": {
-      "accuracy": true,
-      "mean": true,
-      "mode": true,
-      "stddev": true
-    },
-    "predicted_main": [
-      9,
-      11,
-      13,
-      29
+      17,
+      24
     ],
     "predicted_extra": [
       39
@@ -299,20 +299,20 @@
     "run": 9,
     "date": "2025-08-14",
     "predicted": [
-      12,
+      6,
       11,
-      23,
-      22,
-      34
+      25,
+      27,
+      40
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
-    "predicted_sum": 102,
+    "predicted_sum": 109,
     "mean_sum": 105.63,
     "mode_sum": 111,
     "stddev": 26.07,
@@ -323,33 +323,33 @@
       "stddev": true
     },
     "predicted_main": [
-      12,
+      6,
       11,
-      23,
-      22
+      25,
+      27
     ],
     "predicted_extra": [
-      34
+      40
     ]
   },
   {
     "run": 10,
     "date": "2025-08-14",
     "predicted": [
-      2,
-      5,
-      31,
-      32,
-      37
+      7,
+      18,
+      16,
+      24,
+      39
     ],
     "accuracy_scores": [
-      0.9188,
+      0.9186,
       0.9156,
-      0.9262,
-      0.9321,
+      0.9261,
+      0.9323,
       0.9742
     ],
-    "predicted_sum": 107,
+    "predicted_sum": 104,
     "mean_sum": 105.63,
     "mode_sum": 111,
     "stddev": 26.07,
@@ -360,13 +360,13 @@
       "stddev": true
     },
     "predicted_main": [
-      2,
-      5,
-      31,
-      32
+      7,
+      18,
+      16,
+      24
     ],
     "predicted_extra": [
-      37
+      39
     ]
   }
 ]

@@ -70,15 +70,24 @@ class GitHubAutoMerge:
 
     def run_automerge_workflow(self):
         """
-        This method executes the entire workflow on a repository with staged changes.
-        It commits, pushes, creates a PR, and merges it.
+        This method stages all changes in the working directory and then executes
+        the entire workflow on the repository. It commits, pushes, creates a PR,
+        and merges it.
         """
         if not self.repo or not self.g:
             print("Initialization failed. Cannot proceed.")
             return
 
-        # Check for staged changes
-        if not self.repo.index.diff(None) and not self.repo.untracked_files:
+        # Stage all new, modified, and deleted files using `git add -A`
+        print("Staging all modified and untracked files...")
+        try:
+            self.repo.git.add(A=True)
+        except Exception as e:
+            print(f"Error staging files: {e}")
+            return
+
+        # Correctly check for staged changes by comparing the index to the HEAD commit
+        if not self.repo.index.diff("HEAD"):
             print("No staged changes to commit. Aborting automerge workflow.")
             return
 
@@ -117,10 +126,9 @@ class GitHubAutoMerge:
             pr.merge()
             print("Pull request merged successfully.")
 
-            # Optional: delete the remote branch after merge
-            #print("Deleting remote branch...")
-            #self.github_repo.get_git_ref(f"heads/{new_branch_name}").delete()
-            #print("Remote branch deleted.")
+            # Pull the latest changes from the remote to the local branch
+            self.repo.git.pull(self.remote_name, current_branch)
+            print(f"Pulled latest changes to local branch '{current_branch}'.")
 
         except git.GitError as e:
             print(f"Git operation failed: {e}")
@@ -129,6 +137,6 @@ class GitHubAutoMerge:
         finally:
             # Always check out the original branch
             self.repo.git.checkout(current_branch)
-            # Optional: delete the local branch
-            self.repo.delete_head(new_branch_name)
+            # Force delete the local branch to avoid the "not fully merged" error
+            self.repo.delete_head(new_branch_name, force=True)
             print(f"Switched back to branch '{current_branch}' and deleted local branch '{new_branch_name}'.")

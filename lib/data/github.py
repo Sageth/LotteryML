@@ -1,6 +1,7 @@
 import os
+
 import git
-import argparse
+
 from github import Github
 
 
@@ -45,9 +46,8 @@ class GitHubAutoMerge:
 
             # If owner and repo name are not provided, try to get them from the remote URL
             if not self.github_owner or not self.github_repo_name:
-                self.remote_url = next(
-                    (remote.url for remote in self.repo.remotes if remote.name == self.remote_name), None
-                )
+                self.remote_url = next((remote.url for remote in self.repo.remotes if remote.name == self.remote_name),
+                    None)
                 if not self.remote_url:
                     raise ValueError(f"Remote '{self.remote_name}' not found.")
 
@@ -115,12 +115,7 @@ class GitHubAutoMerge:
 
             # Create the pull request
             print("Creating pull request...")
-            pr = self.github_repo.create_pull(
-                title=pr_title,
-                body=pr_body,
-                head=new_branch_name,
-                base=current_branch
-            )
+            pr = self.github_repo.create_pull(title=pr_title, body=pr_body, head=new_branch_name, base=current_branch)
             print(f"Pull request created: {pr.html_url}")
 
             print("Automerge is enabled. Merging the PR...")

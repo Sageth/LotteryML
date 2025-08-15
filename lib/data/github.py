@@ -77,7 +77,7 @@ class GitHubAutoMerge:
         if not self.repo or not self.g:
             print("Initialization failed. Cannot proceed.")
             return
-
+        
         # Stage all new, modified, and deleted files using `git add -A`
         print("Staging all modified and untracked files...")
         try:

@@ -7,3 +7,4 @@
 **/.coverage
 **/.run/
 lottery-cron.sh
+**/.env

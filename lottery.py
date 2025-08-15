@@ -11,6 +11,10 @@ from lib.models.predictor import (
     generate_predictions,
     export_predictions
 )
+from lib.data.github import GitHubAutoMerge
+import dotenv
+import os
+
 
 def main():
     log = logger()
@@ -18,8 +22,21 @@ def main():
     parser = argparse.ArgumentParser(description='Predict lottery numbers.')
     parser.add_argument('--gamedir', required=True, help='Path to game directory. No trailing slash.')
     parser.add_argument("--report-accuracy", action="store_true", help="Generate live accuracy report only")
-
+    parser.add_argument('--automerge', action='store_true', help='If specified, the created PR will be automatically merged.')
     args = parser.parse_args()
+
+    try:
+        # Load environment variables from a .env file
+        dotenv.load_dotenv()
+        dotenv_available = True
+    except ImportError:
+        dotenv_available = False
+
+
+    github_pat = os.getenv('GITHUB_TOKEN')
+    repo_path = os.getenv('GITHUB_REPO_PATH')
+    github_remote = os.getenv('GITHUB_REMOTE_REPO')
+    github_owner = os.getenv('GITHUB_OWNER')
 
     if args.report_accuracy:
         log.info("📊 Running live accuracy report...")
@@ -39,6 +56,14 @@ def main():
 
     predictions = generate_predictions(data, config, models, stats, log)
     export_predictions(predictions, args.gamedir, log)
+
+    if args.automerge:
+        # Create an instance of the class
+        automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner, github_repo_name=github_remote)
+
+        # Now, the automator takes over and handles the git operations.
+        if automator.repo and automator.g:
+            automator.run_automerge_workflow()
 
 
 if __name__ == "__main__":

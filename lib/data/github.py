@@ -35,6 +35,7 @@ class GitHubAutoMerge:
         self.remote_url = None
         self.github_owner = github_owner
         self.github_repo_name = github_repo_name
+        self.main_branch = 'main'
 
         try:
             # Initialize GitPython repository object
@@ -77,7 +78,7 @@ class GitHubAutoMerge:
         if not self.repo or not self.g:
             print("Initialization failed. Cannot proceed.")
             return
-        
+
         # Stage all new, modified, and deleted files using `git add -A`
         print("Staging all modified and untracked files...")
         try:
@@ -126,17 +127,19 @@ class GitHubAutoMerge:
             pr.merge()
             print("Pull request merged successfully.")
 
+            # Switch back to the original branch before pulling
+            self.repo.git.checkout(self.main_branch)
+            print(f"Switched to local branch '{self.main_branch}'.")
+
             # Pull the latest changes from the remote to the local branch
-            self.repo.git.pull(self.remote_name, current_branch)
-            print(f"Pulled latest changes to local branch '{current_branch}'.")
+            self.repo.git.pull(self.remote_name, self.main_branch)
+            print(f"Pulled latest changes to local branch '{self.main_branch}'.")
 
         except git.GitError as e:
             print(f"Git operation failed: {e}")
         except Exception as e:
             print(f"GitHub API operation failed: {e}")
         finally:
-            # Always check out the original branch
-            self.repo.git.checkout(current_branch)
             # Force delete the local branch to avoid the "not fully merged" error
             self.repo.delete_head(new_branch_name, force=True)
-            print(f"Switched back to branch '{current_branch}' and deleted local branch '{new_branch_name}'.")
+            print(f"Deleted local branch '{new_branch_name}'.")

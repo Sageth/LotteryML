@@ -1,0 +1,372 @@
+[
+  {
+    "run": 1,
+    "date": "2025-08-15",
+    "predicted": [
+      10,
+      6,
+      31,
+      35,
+      26
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 108,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      10,
+      6,
+      31,
+      35
+    ],
+    "predicted_extra": [
+      26
+    ]
+  },
+  {
+    "run": 2,
+    "date": "2025-08-15",
+    "predicted": [
+      9,
+      19,
+      16,
+      24,
+      39
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 107,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      19,
+      16,
+      24
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 3,
+    "date": "2025-08-15",
+    "predicted": [
+      10,
+      13,
+      25,
+      22,
+      40
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      10,
+      13,
+      25,
+      22
+    ],
+    "predicted_extra": [
+      40
+    ]
+  },
+  {
+    "run": 4,
+    "date": "2025-08-15",
+    "predicted": [
+      10,
+      11,
+      16,
+      29,
+      40
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 106,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      10,
+      11,
+      16,
+      29
+    ],
+    "predicted_extra": [
+      40
+    ]
+  },
+  {
+    "run": 5,
+    "date": "2025-08-15",
+    "predicted": [
+      7,
+      17,
+      16,
+      28,
+      39
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 107,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      7,
+      17,
+      16,
+      28
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 6,
+    "date": "2025-08-15",
+    "predicted": [
+      13,
+      16,
+      21,
+      35,
+      25
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 110,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      13,
+      16,
+      21,
+      35
+    ],
+    "predicted_extra": [
+      25
+    ]
+  },
+  {
+    "run": 7,
+    "date": "2025-08-15",
+    "predicted": [
+      7,
+      17,
+      16,
+      27,
+      39
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 106,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      7,
+      17,
+      16,
+      27
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 8,
+    "date": "2025-08-15",
+    "predicted": [
+      7,
+      19,
+      15,
+      27,
+      39
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 107,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      7,
+      19,
+      15,
+      27
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 9,
+    "date": "2025-08-15",
+    "predicted": [
+      11,
+      16,
+      23,
+      33,
+      24
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 107,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      11,
+      16,
+      23,
+      33
+    ],
+    "predicted_extra": [
+      24
+    ]
+  },
+  {
+    "run": 10,
+    "date": "2025-08-15",
+    "predicted": [
+      10,
+      7,
+      31,
+      32,
+      26
+    ],
+    "accuracy_scores": [
+      0.9131,
+      0.914,
+      0.9268,
+      0.9367,
+      0.9745
+    ],
+    "predicted_sum": 106,
+    "mean_sum": 105.63,
+    "mode_sum": 111,
+    "stddev": 26.07,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      10,
+      7,
+      31,
+      32
+    ],
+    "predicted_extra": [
+      26
+    ]
+  }
+]

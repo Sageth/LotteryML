@@ -47,7 +47,7 @@ class GitHubAutoMerge:
             # If owner and repo name are not provided, try to get them from the remote URL
             if not self.github_owner or not self.github_repo_name:
                 self.remote_url = next((remote.url for remote in self.repo.remotes if remote.name == self.remote_name),
-                    None)
+                                       None)
                 if not self.remote_url:
                     raise ValueError(f"Remote '{self.remote_name}' not found.")
 

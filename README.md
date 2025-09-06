@@ -11,7 +11,7 @@ Have fun exploring statistical modeling. Maybe win something. Probably not — a
 I strongly recommend using pipenv. Once you've created your virtual environment, just do `pipenv sync`.
 
 ### How to run
-Go to the main directory and run `python lottery.py --gamedir <GAMEDIRECTORY>`. 
+Go to the main directory and run `python lottery.py --gamedir <GAMEDIRECTORY>`
 
 The argument `GAMEDIRECTORY` is a case-sensitive value of the game that you want to run. For example:
 
@@ -21,7 +21,7 @@ python lottery.py --gamedir NJ_Pick6
 
 If you have been running predictions and want to test the accuracy of your predictions against real game data:
 ```shell
-python lottery.py --gamedir=NJ_Cash4Life --report-accuracy
+python lottery.py --gamedir=NJ_Cash4Life --accuracy
 ```
 
 ### Config

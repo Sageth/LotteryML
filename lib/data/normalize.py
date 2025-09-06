@@ -1,6 +1,3 @@
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
-
 def normalize_features(data, config):
     skip_cols = ["Date"] + [f"Ball{i}" for i in config["game_balls"]]
 

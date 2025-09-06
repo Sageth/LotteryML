@@ -1,6 +1,8 @@
-import os
 import glob
+import os
+
 import pandas as pd
+
 
 def load_data(gamedir: str) -> pd.DataFrame:
     csv_files = glob.glob(os.path.join(gamedir, "./source/*.csv"))

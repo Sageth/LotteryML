@@ -1,7 +1,9 @@
 # lib/data/features.py
 
-import pandas as pd
 import random
+
+import pandas as pd
+
 
 def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     # Identify main ball columns
@@ -13,14 +15,11 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
 
     # --- FILTER invalid rows ---
     valid_rows = data[[f"Ball{i}" for i in config["game_balls"]]].apply(
-        lambda row: all(config["ball_game_range_low"] <= n <= config["ball_game_range_high"] for n in row),
-        axis=1
-    )
+        lambda row: all(config["ball_game_range_low"] <= n <= config["ball_game_range_high"] for n in row), axis=1)
 
     if config.get("game_has_extra", False):
         extra_valid = data[config["game_extra_col"]].apply(
-            lambda n: config["game_balls_extra_low"] <= n <= config["game_balls_extra_high"]
-        )
+            lambda n: config["game_balls_extra_low"] <= n <= config["game_balls_extra_high"])
         valid_rows &= extra_valid
 
     # Apply filter
@@ -54,7 +53,8 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         window = data.iloc[max(0, idx - 10):idx + 1][[f"Ball{i}" for i in config["game_balls"]]]
 
         row_features["sum"] = row[[f"Ball{i}" for i in config["game_balls"]]].sum()
-        row_features["sum_zscore"] = (row[[f"Ball{i}" for i in config["game_balls"]]].sum() - window.sum(axis=1).mean()) / (window.sum(axis=1).std() + 1e-6)
+        row_features["sum_zscore"] = (row[[f"Ball{i}" for i in config["game_balls"]]].sum() - window.sum(
+            axis=1).mean()) / (window.sum(axis=1).std() + 1e-6)
         row_features["even_count"] = sum(1 for n in row[[f"Ball{i}" for i in config["game_balls"]]] if n % 2 == 0)
         row_features["odd_count"] = sum(1 for n in row[[f"Ball{i}" for i in config["game_balls"]]] if n % 2 != 0)
 

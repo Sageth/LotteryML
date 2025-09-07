@@ -6,7 +6,7 @@
     "mode_allowance": 0.10,
     "mean_allowance": 0.05,
     "model_save_path": "models",
-    "game_balls": "range(1, 5)",
+    "game_balls": "range(1, 6)",
     "game_has_extra": true,
     "game_extra_name": "PowerBall",
     "game_extra_col": "BallExtra",

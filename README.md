@@ -10,6 +10,19 @@ Have fun exploring statistical modeling. Maybe win something. Probably not — a
 ### Set up
 I strongly recommend using pipenv. Once you've created your virtual environment, just do `pipenv sync`.
 
+You will need a `.env` file in the root of your directory with the following contents:
+```dotenv
+GITHUB_TOKEN=<your github PAT>
+GITHUB_REPO_PATH=<local path where you cloned the repository>
+GITHUB_REMOTE_REPO=LotteryML
+GITHUB_OWNER=<Your github username>
+
+# Only required if you use automated commits via cron/serviced.
+GIT_SIGNING_KEY=<your github signing key>
+GIT_SIGN_COMMITS=true;
+
+```
+
 ### How to run
 Go to the main directory and run `python lottery.py --gamedir <GAMEDIRECTORY>`
 

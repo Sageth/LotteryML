@@ -41,6 +41,16 @@ class GitHubAutoMerge:
         try:
             # Initialize GitPython repository object
             self.repo = git.Repo(self.repo_path)
+
+            # Configure GPG signing from environment variables
+            self.signing_key = os.getenv("GIT_SIGNING_KEY")
+            self.sign_commits = os.getenv("GIT_SIGN_COMMITS", "false").lower() == "true"
+            if self.sign_commits and self.signing_key:
+                # Set signing key for this repo only
+                self.repo.git.config("user.signingkey", self.signing_key, "--local")
+                self.repo.git.config("commit.gpgsign", "true", "--local")
+                print(f"GPG signing enabled for repo using key {self.signing_key}.")
+
             # Initialize PyGithub client
             self.g = Github(self.github_pat)
 
@@ -100,13 +110,17 @@ class GitHubAutoMerge:
         pr_body = f"This PR contains automated updates."
 
         try:
-            # Create a new branch
+            # Create and checkout new branch
             new_branch = self.repo.create_head(new_branch_name)
             new_branch.checkout()
 
-            # Commit the staged changes
+            # Commit with signing
             # self.repo.index.commit(commit_message)  # Causes unverified commits
-            self.repo.git.commit('-m', commit_message, '-S')
+            if self.sign_commits and self.signing_key:
+                self.repo.git.commit('-m', commit_message, '-S')
+            else:
+                self.repo.git.commit('-m', commit_message)
+
             print(f"Committed changes on branch '{new_branch_name}'.")
 
             # Push the new branch to the remote

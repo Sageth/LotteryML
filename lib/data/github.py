@@ -105,7 +105,8 @@ class GitHubAutoMerge:
             new_branch.checkout()
 
             # Commit the staged changes
-            self.repo.index.commit(commit_message)
+            # self.repo.index.commit(commit_message)  # Causes unverified commits
+            self.repo.git.commit('-m', commit_message, '-S')
             print(f"Committed changes on branch '{new_branch_name}'.")
 
             # Push the new branch to the remote

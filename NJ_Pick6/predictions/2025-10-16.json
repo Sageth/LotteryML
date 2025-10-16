@@ -1,0 +1,402 @@
+[
+  {
+    "run": 1,
+    "date": "2025-10-16",
+    "predicted": [
+      7,
+      19,
+      24,
+      34,
+      21,
+      40
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 145,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      7,
+      19,
+      24,
+      34,
+      21
+    ],
+    "predicted_extra": [
+      40
+    ]
+  },
+  {
+    "run": 2,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      10,
+      16,
+      30,
+      28,
+      39
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 132,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      10,
+      16,
+      30,
+      28
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 3,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      10,
+      21,
+      34,
+      28,
+      39
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 141,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      10,
+      21,
+      34,
+      28
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 4,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      10,
+      20,
+      29,
+      38,
+      39
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 145,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      10,
+      20,
+      29,
+      38
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 5,
+    "date": "2025-10-16",
+    "predicted": [
+      10,
+      11,
+      15,
+      18,
+      35,
+      44
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 133,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      10,
+      11,
+      15,
+      18,
+      35
+    ],
+    "predicted_extra": [
+      44
+    ]
+  },
+  {
+    "run": 6,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      10,
+      16,
+      30,
+      37,
+      38
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 140,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      10,
+      16,
+      30,
+      37
+    ],
+    "predicted_extra": [
+      38
+    ]
+  },
+  {
+    "run": 7,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      11,
+      20,
+      28,
+      30,
+      39
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 137,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      11,
+      20,
+      28,
+      30
+    ],
+    "predicted_extra": [
+      39
+    ]
+  },
+  {
+    "run": 8,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      11,
+      16,
+      32,
+      30,
+      38
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 136,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      11,
+      16,
+      32,
+      30
+    ],
+    "predicted_extra": [
+      38
+    ]
+  },
+  {
+    "run": 9,
+    "date": "2025-10-16",
+    "predicted": [
+      10,
+      11,
+      15,
+      21,
+      35,
+      44
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 136,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      10,
+      11,
+      15,
+      21,
+      35
+    ],
+    "predicted_extra": [
+      44
+    ]
+  },
+  {
+    "run": 10,
+    "date": "2025-10-16",
+    "predicted": [
+      9,
+      11,
+      21,
+      35,
+      28,
+      39
+    ],
+    "accuracy_scores": [
+      0.9356,
+      0.9131,
+      0.9361,
+      0.9504,
+      0.9853,
+      0.9902
+    ],
+    "predicted_sum": 143,
+    "mean_sum": 138.67,
+    "mode_sum": 146,
+    "stddev": 30.42,
+    "pass_checks": {
+      "accuracy": true,
+      "mean": true,
+      "mode": true,
+      "stddev": true
+    },
+    "predicted_main": [
+      9,
+      11,
+      21,
+      35,
+      28
+    ],
+    "predicted_extra": [
+      39
+    ]
+  }
+]

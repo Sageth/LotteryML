@@ -19,10 +19,10 @@ def report_live_accuracy_all(gamedir, log):
     # Find all prediction files
     pred_files = sorted(glob.glob(os.path.join(gamedir, "predictions", "*.json")))
     if not pred_files:
-        log.warning("⚠️ No predictions found — nothing to report.")
+        log.warning("No predictions found — nothing to report.")
         return
 
-    log.info(f"🎯 Evaluating live accuracy across {len(pred_files)} prediction files...")
+    log.info(f"Evaluating live accuracy across {len(pred_files)} prediction files...")
 
     total_predictions = 0  # number of individual runs across all JSONs that were evaluated
     total_matches = 0
@@ -41,17 +41,17 @@ def report_live_accuracy_all(gamedir, log):
             match_counts.append(mc)
 
     if total_predictions == 0:
-        log.warning("⚠️ No predictions could be evaluated (no actual result dates found).")
+        log.warning("No predictions could be evaluated (no actual result dates found).")
         return
 
     avg_match = total_matches / total_predictions
-    log.info(f"✅ Summary: {total_predictions} predictions, avg match {avg_match:.2f} numbers.")
+    log.info(f"Summary: {total_predictions} predictions, avg match {avg_match:.2f} numbers.")
 
     # Breakdown histogram (counts only)
     breakdown = Counter(match_counts)
     max_balls = len(config["game_balls"]) + (1 if config.get("use_bonus", False) else 0)
 
-    log.info("📊 Match count breakdown:")
+    log.info("Match count breakdown:")
     for k in range(0, max_balls + 1):
         log.info(f"    {k} balls matched: {breakdown.get(k, 0)} times")
 
@@ -65,13 +65,13 @@ def report_live_accuracy(gamedir, log, config, df, pred_file):
         with open(pred_file, "r") as f:
             prediction = json.load(f)
     except Exception as e:
-        log.warning(f"⚠️ Failed to read {pred_file}: {e}")
+        log.error(f"Failed to read {pred_file}: {e}")
         return None
 
     # Only proceed if there's an actual result for this date
     row = df[df["Date"] == pred_date]
     if row.empty:
-        log.debug(f"📅 No actual result for {pred_date} → skipping this file.")
+        log.debug(f"No actual result for {pred_date} → skipping this file.")
         return None
 
     # Extract actual numbers
@@ -93,8 +93,8 @@ def report_live_accuracy(gamedir, log, config, df, pred_file):
     if best_match == total_needed:
         GREEN_BOLD = "\033[1;32m"
         RESET = "\033[0m"
-        log.info(f"{GREEN_BOLD}🎉 PERFECT! {pred_date}: at least one run matched ALL {total_needed}/{total_needed} numbers!{RESET}")
+        log.info(f"{GREEN_BOLD} PERFECT! {pred_date}: at least one run matched ALL {total_needed}/{total_needed} numbers!{RESET}")
     else:
-        log.debug(f"📅 {pred_date}: best of {len(run_match_counts)} runs was {best_match}/{total_needed}")
+        log.debug(f"{pred_date}: best of {len(run_match_counts)} runs was {best_match}/{total_needed}")
 
     return (pred_date, run_match_counts, len(actual_numbers))

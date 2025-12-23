@@ -19,8 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description='Predict lottery numbers.')
     parser.add_argument('--gamedir', required=True, help='Path to game directory. No trailing slash.')
     parser.add_argument("--accuracy", action="store_true", help="Generate live accuracy report only")
-    parser.add_argument('--automerge', action='store_true',
-                        help='If specified, the created PR will be automatically merged.')
+    parser.add_argument('--automerge', action='store_true', help='If specified, the created PR will be automatically merged.')
     args = parser.parse_args()
 
     try:
@@ -36,7 +35,7 @@ def main():
     github_owner = os.getenv('GITHUB_OWNER')
 
     if args.accuracy:
-        log.info("📊 Running live accuracy report...")
+        log.info("Running live accuracy report...")
         from lib.models.accuracy import report_live_accuracy_all
         report_live_accuracy_all(args.gamedir, log)
         return
@@ -47,7 +46,7 @@ def main():
     config = evaluate_config(load_config(args.gamedir))
     data = load_data(args.gamedir)
     data = engineer_features(data, config, log)
-    data = normalize_features(data, config)  # add this
+    data = normalize_features(data, config)
     stats = prepare_statistics(data, config, log)
     models = build_models(data, config, args.gamedir, stats, log)
 
@@ -55,11 +54,9 @@ def main():
     export_predictions(predictions, args.gamedir, log)
 
     if args.automerge:
-        # Create an instance of the class
         automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
                                     github_repo_name=github_remote)
 
-        # Now, the automator takes over and handles the git operations.
         if automator.repo and automator.g:
             automator.run_automerge_workflow()
 

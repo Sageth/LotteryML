@@ -127,6 +127,12 @@ def main():
         help="Run regime-aware accuracy evaluation",
     )
 
+    parser.add_argument(
+        "--automerge",
+        action="store_true",
+        help="Automatically commit and merge prediction updates to GitHub"
+    )
+
     args = parser.parse_args()
 
     run_lottery(args.gamedir, args)

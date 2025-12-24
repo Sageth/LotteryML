@@ -5,160 +5,95 @@
 # Machine Learning Lottery
 
 ## Purpose
-Have fun exploring statistical modeling. Maybe win something. Probably not — and that's okay.
+This project explores statistical modeling, entropy analysis, and feature engineering on lottery draw data.  
+It’s a sandbox for experimentation — not a system for beating randomness.  
+If you win anything, consider it luck, not a guarantee.
 
-### Set up
-I strongly recommend using pipenv. Once you've created your virtual environment, just do `pipenv sync`.
+---
 
-You will need a `.env` file in the root of your directory with the following contents:
+# Setup
+
+## 1. Create your virtual environment
+Pipenv is recommended:
+
+```shell
+pipenv sync
+```
+
+## 2. Create a `.env` file in the project root
 ```dotenv
 GITHUB_TOKEN=<your github PAT>
 GITHUB_REPO_PATH=<local path where you cloned the repository>
 GITHUB_REMOTE_REPO=LotteryML
-GITHUB_OWNER=<Your github username>
+GITHUB_OWNER=<your github username>
 
-# Only required if you use automated commits via cron/serviced.
+# Optional: only needed if you use --automerge or automated commits
 GIT_SIGNING_KEY=<your github signing key>
-GIT_SIGN_COMMITS=true;
-
+GIT_SIGN_COMMITS=true
 ```
+The .env file is automatically loaded by lottery.py.
 
-### How to run
-Go to the main directory and run `python lottery.py --gamedir <GAMEDIRECTORY>`
-
-The argument `GAMEDIRECTORY` is a case-sensitive value of the game that you want to run. For example:
-
+## 3. How to run
 ```shell
-python lottery.py --gamedir NJ_Pick6
+python lottery.py <GAMEDIRECTORY>
 ```
-
-If you have been running predictions and want to test the accuracy of your predictions against real game data:
+Example:
 ```shell
-python lottery.py --gamedir=NJ_Cash4Life --accuracy
+python lottery.py NJ_Pick6
 ```
 
-### Config
+### Force Retraining
+```shell
+python lottery.py NJ_Cash4Life --force-retrain
+```
 
-`ball_game_range_low`: This is the lowest number of the main game
+### Dry run (no export)
+```shell
+python lottery.py NJ_Cash5 --dry-run
+```
 
-`ball_game_range_high`: This is the highest number of the main game
+### Test mode (disable filtered checks)
+```shell
+python lottery.py Powerball --test-mode
+```
 
-`mode_allowance`: Percentage (in decimal) for how far from the mode you can be. 0.05 (5%) from the mode of the sums.
+### Accuracy evaluation (overall)
+```shell
+python lottery.py NJ_Cash4Life --accuracy
+```
 
-`mean_allowance`: Percentage (in decimal) for how far from the mean you can be. 0.05 (5%) from the mean of the sums.
+### Regime-aware accuracy evaluation
+```shell
+python lottery.py MegaMillions --accuracy-regimes
+```
 
-`model_save_path`: Define the path to save models. You probably shouldn't change this.
+### Generate predictions and auto-commit to github
+```shell
+python lottery.py NJ_Cash4Life --force-retrain --automerge
+```
 
-`game_balls`: Number of balls. Index 0 is the date. Take the max range and subtract 1 for the number of balls in play.
+## Configuration
+Each game has a config.json in its directory.
+These configs are clean, minimal, and JSON‑native.
 
-`game_balls_extra_low`: Low range of the Powerball, Mega ball, or another ball that can repeat from the main game. 
+Required fields
+## Required fields
 
-`game_balls_extra_high`: High range of the Powerball, Mega ball, or another ball that can repeat from the main game. 
-
----
-
-## Troubleshooting
-
----
-Error: `InconsistentVersionWarning: Trying to unpickle estimator DecisionTreeRegressor from 
-version x.y.z.post1 when using version a.b.c. This might lead to breaking code or invalid results. Use at your own risk.`
-
-Solution: Delete the `*.joblib` files in the `models` directory and rerun. The files will be regenerated.
-
----
-
-
-# Roadmap
-
-## Features
-- [x] Supports multiple game types
-- [x] 90%+ Test coverage
-- [x] Per-game configuration
-- [x] Generates models based on source data
-- [x] Regenerates models if outdated
-- [x] Records predictions per day (10 draws)
-- [x] Checks accuracy of recorded predictions against real game data
-
-## Upgrade Models
-
-**Goal:** Move beyond linear models to nonlinear / ensemble models
-
-Planned:
-
-- [ ] Add XGBoost builder option
-- [ ] Add LightGBM builder option
-- [ ] Add RandomForest builder option
-- [ ] Config switch to choose model per game
-
----
-
-## Add Time-based Features
-
-**Goal:** Capture evolving patterns and trends
-
-Features to add:
-
-- [ ] Rolling average frequency (N past draws)
-- [ ] Rolling ball gaps (windowed)
-- [ ] Rolling entropy
-- [ ] Fourier / seasonal terms
-- [ ] Recent draw "momentum" indicator
-
----
-
-## Add features
-
-**Goal:** Capture deeper structure
-
-Ideas:
-
-- [ ] Draw clustering (k-means, DBSCAN)
-- [ ] PCA components (latent trends)
-- [ ] Cross-game learning (multi-game patterns)
-- [ ] Game change point detection (detect when game rules shift)
-
----
-
-## Improve Model Training
-
-**Goal:** Tune for performance
-
-Planned:
-
-- [ ] Integrate Optuna / Hyperopt hyperparameter tuning
-- [ ] Implement rolling-forward CV
-- [ ] Add validation/test split options
-- [ ] Per-ball tuning
-
----
-
-## Ensembling
-
-**Goal:** Model dependencies between balls
-
-Ideas:
-
-- [ ] Ensemble multiple models per ball
-- [ ] Meta-predictor across runs
-- [ ] Correlation modeling (balls are not strictly independent)
-
----
-
-## Reporting & UX
-
-Planned:
-
-- [ ] Accuracy trend over time (plot)
-- [ ] Per-ball accuracy heatmaps
-- [ ] Confidence intervals on predictions
-- [ ] CLI option to show "top X% most likely balls"
-
----
-
-## Bonus Ideas
-
-- [X] Support for 2D ball games (Powerball / Mega Millions → main + special balls)
-- [ ] "Smart wheel" generator to optimize plays for coverage
+| Field                 | Description                               |
+|-----------------------|-------------------------------------------|
+| ball_game_range_high  | Highest number in the main draw           |
+| ball_game_range_low   | Lowest number in the main draw            |
+| game_balls            | List of ball positions (e.g., [1,2,3,4,5]) |
+| game_balls_extra_high | Highest extra-ball number                 |
+| game_balls_extra_low  | Lowest extra-ball number                  |
+| game_extra_col        | Column name in the dataset                |
+| game_extra_name       | Name of the extra ball (PowerBall, MegaBall, CashBall) |
+| game_has_extra        | Whether the game has a bonus ball         |
+| mean_allowance        | Allowed deviation from mean of sums       |
+| mode_allowance        | Allowed deviation from mode of sums       |
+| model_save_path       | Directory for saved models                |
+| no_duplicates         | Whether main balls must be unique         |
+| train_ratio           | Train/test split ratio                    |
 
 ---
 

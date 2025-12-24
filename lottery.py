@@ -2,12 +2,13 @@
 
 import argparse
 import os
-from datetime import datetime
+from dotenv import load_dotenv
 
 from lib.config.loader import load_config, evaluate_config
-from lib.data.io import load_data
 from lib.data.features import engineer_features
+from lib.data.io import load_data
 from lib.data.normalize import normalize_features
+from lib.models.accuracy import report_live_accuracy_all
 from lib.models.predictor import (
     should_skip_predictions,
     prepare_statistics,
@@ -15,7 +16,7 @@ from lib.models.predictor import (
     generate_predictions,
     export_predictions,
 )
-from lib.models.accuracy import report_live_accuracy_all
+from lib.data.github import GitHubAutoMerge
 
 
 # ------------------------------------------------------------
@@ -37,6 +38,12 @@ class Logger:
 # ------------------------------------------------------------
 def run_lottery(gamedir, args):
     log = Logger()
+
+    # Load GitHub-related environment variables (dotenv already loaded in main)
+    github_pat = os.getenv("GITHUB_TOKEN")
+    repo_path = os.getenv("GITHUB_REPO_PATH")
+    github_owner = os.getenv("GITHUB_OWNER")
+    github_repo = os.getenv("GITHUB_REMOTE_REPO")
 
     log.info("Loading configuration...")
     config = evaluate_config(load_config(gamedir))
@@ -83,6 +90,23 @@ def run_lottery(gamedir, args):
     log.info("Exporting predictions...")
     export_predictions(predictions, gamedir, log)
 
+    # ------------------------------------------------------------
+    # AUTOMERGE WORKFLOW
+    # ------------------------------------------------------------
+    if args.automerge:
+        log.info("Running GitHub automerge workflow...")
+
+        if not github_pat or not repo_path or not github_owner or not github_repo:
+            log.error("Missing GitHub environment variables. Automerge aborted.")
+        else:
+            automator = GitHubAutoMerge(
+                repo_path=repo_path,
+                github_pat=github_pat,
+                github_owner=github_owner,
+                github_repo_name=github_repo,
+            )
+            automator.run_automerge_workflow()
+
     log.info("Done.")
 
 
@@ -90,47 +114,21 @@ def run_lottery(gamedir, args):
 # CLI
 # ------------------------------------------------------------
 def main():
+    # Load environment variables from .env
+    load_dotenv(".env")
+
     parser = argparse.ArgumentParser(description="Lottery Prediction Orchestrator")
 
-    parser.add_argument(
-        "gamedir",
-        help="Directory containing game configuration and source data",
-    )
-
-    parser.add_argument(
-        "--force-retrain",
-        action="store_true",
-        help="Force retraining of all models",
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Run pipeline but do not export predictions",
-    )
-
-    parser.add_argument(
-        "--test-mode",
-        action="store_true",
-        help="Disable filtering checks for predictions",
-    )
-
-    parser.add_argument(
-        "--accuracy",
-        action="store_true",
-        help="Run accuracy evaluation (overall)",
-    )
-
-    parser.add_argument(
-        "--accuracy-regimes",
-        action="store_true",
-        help="Run regime-aware accuracy evaluation",
-    )
+    parser.add_argument("gamedir", help="Directory containing game configuration and source data")
+    parser.add_argument("--force-retrain", action="store_true", help="Force retraining of all models")
+    parser.add_argument("--dry-run", action="store_true", help="Run pipeline but do not export predictions")
+    parser.add_argument("--test-mode", action="store_true", help="Disable filtering checks for predictions")
+    parser.add_argument("--accuracy", action="store_true", help="Run accuracy evaluation (overall)")
+    parser.add_argument("--accuracy-regimes", action="store_true", help="Run regime-aware accuracy evaluation")
+    parser.add_argument("--automerge", action="store_true", help="Automatically commit and merge prediction updates to GitHub")
 
     args = parser.parse_args()
-
     run_lottery(args.gamedir, args)
-
 
 if __name__ == "__main__":
     main()

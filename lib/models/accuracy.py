@@ -1,100 +1,217 @@
-import os
-import glob
-import json
-import logging
-from collections import Counter
+# lib/models/accuracy.py
 
+import numpy as np
 import pandas as pd
-
-from lib.config.loader import load_config, evaluate_config
-from lib.data.io import load_data
+from datetime import datetime
 
 
+# ------------------------------------------------------------
+# Utility: Count hits between predicted and actual
+# ------------------------------------------------------------
+def _count_hits(predicted, actual):
+    return len(set(predicted) & set(actual))
+
+
+# ------------------------------------------------------------
+# Baseline: Uniform random draw
+# ------------------------------------------------------------
+def _uniform_random_draw(config):
+    balls = np.random.choice(
+        range(config["ball_game_range_low"], config["ball_game_range_high"] + 1),
+        size=len(config["game_balls"]),
+        replace=False
+    )
+
+    if config.get("game_has_extra", False):
+        extra = np.random.randint(
+            config["game_balls_extra_low"],
+            config["game_balls_extra_high"] + 1
+        )
+        return list(balls) + [extra]
+
+    return list(balls)
+
+
+# ------------------------------------------------------------
+# Baseline: Frequency-weighted draw
+# ------------------------------------------------------------
+def _frequency_weighted_draw(freq_map, config):
+    numbers = list(freq_map.keys())
+    weights = np.array(list(freq_map.values()), dtype=float)
+    weights /= weights.sum()
+
+    balls = np.random.choice(
+        numbers,
+        size=len(config["game_balls"]),
+        replace=False,
+        p=weights
+    )
+
+    if config.get("game_has_extra", False):
+        extra = np.random.choice(numbers, p=weights)
+        return list(balls) + [extra]
+
+    return list(balls)
+
+
+# ------------------------------------------------------------
+# Baseline: Recency-weighted draw
+# ------------------------------------------------------------
+def _recency_weighted_draw(recency_map, config):
+    numbers = list(recency_map.keys())
+    recency = np.array(list(recency_map.values()), dtype=float)
+
+    # More recent = higher weight
+    weights = 1 / (recency + 1)
+    weights /= weights.sum()
+
+    balls = np.random.choice(
+        numbers,
+        size=len(config["game_balls"]),
+        replace=False,
+        p=weights
+    )
+
+    if config.get("game_has_extra", False):
+        extra = np.random.choice(numbers, p=weights)
+        return list(balls) + [extra]
+
+    return list(balls)
+
+
+# ------------------------------------------------------------
+# Compute frequency and recency maps
+# ------------------------------------------------------------
+def _compute_frequency_and_recency(data, config):
+    flat = data[[f"Ball{i}" for i in config["game_balls"]]].values.flatten()
+    freq_map = pd.Series(flat).value_counts().to_dict()
+
+    recency_map = {}
+    for n in range(config["ball_game_range_low"], config["ball_game_range_high"] + 1):
+        last_seen = data.apply(lambda row: n in row.values, axis=1).to_numpy()[::-1]
+        idx = np.argmax(last_seen) if last_seen.any() else len(data)
+        recency_map[n] = idx
+
+    return freq_map, recency_map
+
+
+# ------------------------------------------------------------
+# Main accuracy evaluation
+# ------------------------------------------------------------
 def report_live_accuracy_all(gamedir, log):
-    # Load config & actual game data
+    """
+    Evaluate model accuracy vs. multiple baselines,
+    including regime-specific accuracy.
+    """
+
+    # Lazy imports to avoid circular dependencies
+    from lib.data.io import load_data
+    from lib.config.loader import load_config, evaluate_config
+    from lib.data.features import engineer_features
+    from lib.data.normalize import normalize_features
+    from lib.models.predictor import prepare_statistics, build_models, _sample_from_proba
+
+    log.info("Running enhanced regime-aware accuracy evaluation...")
+
+    # Load and prepare data
     config = evaluate_config(load_config(gamedir))
-    df = load_data(gamedir)
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+    data = load_data(gamedir)
+    data = engineer_features(data, config, log)
+    data = normalize_features(data, config)
 
-    # Find all prediction files
-    pred_files = sorted(glob.glob(os.path.join(gamedir, "predictions", "*.json")))
-    if not pred_files:
-        log.warning("No predictions found — nothing to report.")
-        return
+    stats = prepare_statistics(data, config, log)
+    models, test_scores = build_models(data, config, gamedir, stats, log)
 
-    log.info(f"Evaluating live accuracy across {len(pred_files)} prediction files...")
+    # Compute frequency and recency maps
+    freq_map, recency_map = _compute_frequency_and_recency(data, config)
 
-    total_predictions = 0  # number of individual runs across all JSONs that were evaluated
-    total_matches = 0
-    match_counts = []
+    # Evaluate only on test set (no leakage)
+    test_data = data.tail(int(len(data) * (1 - config.get("train_ratio", 0.8))))
 
-    # Process every JSON; only evaluate if we have an actual result for that date
-    for pred_file in pred_files:
-        result = report_live_accuracy(gamedir, log, config, df, pred_file)
-        if result is None:
-            continue
+    # Storage
+    model_hits = []
+    uniform_hits = []
+    freq_hits = []
+    recency_hits = []
 
-        pred_date, run_match_counts, total_numbers = result
-        for mc in run_match_counts:
-            total_predictions += 1
-            total_matches += mc
-            match_counts.append(mc)
+    # Regime-specific storage
+    regime_hits = {0: [], 1: [], 2: []}
+    regime_counts = {0: 0, 1: 0, 2: 0}
 
-    if total_predictions == 0:
-        log.warning("No predictions could be evaluated (no actual result dates found).")
-        return
+    for _, row in test_data.iterrows():
+        actual = [row[f"Ball{i}"] for i in config["game_balls"]]
+        if config.get("game_has_extra", False):
+            actual.append(row[config["game_extra_col"]])
 
-    avg_match = total_matches / total_predictions
-    log.info(f"Summary: {total_predictions} predictions, avg match {avg_match:.2f} numbers.")
+        # Extract regime for this row
+        regime = int(row["regime"])
+        regime_counts[regime] += 1
 
-    # Breakdown histogram (counts only)
-    breakdown = Counter(match_counts)
-    max_balls = len(config["game_balls"]) + (1 if config.get("use_bonus", False) else 0)
+        # Prepare input vector
+        x_row = row.drop(labels=["Date"] + stats["ball_cols"] + ["sum"]).to_frame().T
 
-    log.info("Match count breakdown:")
-    for k in range(0, max_balls + 1):
-        log.info(f"    {k} balls matched: {breakdown.get(k, 0)} times")
+        # Model prediction (probability-based)
+        predicted = []
+        for ball in config["game_balls"]:
+            pred, _ = _sample_from_proba(models[ball], x_row, temperature=1.0)
+            predicted.append(pred)
 
+        if config.get("game_has_extra", False):
+            pred, _ = _sample_from_proba(models["extra"], x_row, temperature=1.0)
+            predicted.append(pred)
 
-def report_live_accuracy(gamedir, log, config, df, pred_file):
-    filename = os.path.basename(pred_file)
-    pred_date = filename.replace("predict-", "").replace(".json", "")
+        # Baselines
+        uniform_pred = _uniform_random_draw(config)
+        freq_pred = _frequency_weighted_draw(freq_map, config)
+        recency_pred = _recency_weighted_draw(recency_map, config)
 
-    # Load JSON predictions
-    try:
-        with open(pred_file, "r") as f:
-            prediction = json.load(f)
-    except Exception as e:
-        log.error(f"Failed to read {pred_file}: {e}")
-        return None
+        # Count hits
+        mh = _count_hits(predicted, actual)
+        model_hits.append(mh)
+        regime_hits[regime].append(mh)
 
-    # Only proceed if there's an actual result for this date
-    row = df[df["Date"] == pred_date]
-    if row.empty:
-        log.debug(f"No actual result for {pred_date} → skipping this file.")
-        return None
+        uniform_hits.append(_count_hits(uniform_pred, actual))
+        freq_hits.append(_count_hits(freq_pred, actual))
+        recency_hits.append(_count_hits(recency_pred, actual))
 
-    # Extract actual numbers
-    actual_numbers = [int(row.iloc[0][f"Ball{i}"]) for i in config["game_balls"]]
-    if config.get("use_bonus", False):
-        actual_numbers.append(int(row.iloc[0][config["bonus_col"]]))
-    actual_numbers = sorted(actual_numbers)
+    # Summaries
+    def summarize(name, hits):
+        return {
+            "name": name,
+            "avg_hits": float(np.mean(hits)),
+            "hit_distribution": dict(pd.Series(hits).value_counts().sort_index())
+        }
 
-    # Compare every run in the JSON
-    run_match_counts = []
-    for run in prediction:
-        predicted_numbers = sorted(run["predicted"])
-        match_count = len(set(predicted_numbers).intersection(actual_numbers))
-        run_match_counts.append(match_count)
+    results = [
+        summarize("model", model_hits),
+        summarize("uniform_random", uniform_hits),
+        summarize("frequency_weighted", freq_hits),
+        summarize("recency_weighted", recency_hits)
+    ]
 
-    # Optional: quick per-date debug/celebration
-    best_match = max(run_match_counts) if run_match_counts else 0
-    total_needed = len(actual_numbers)
-    if best_match == total_needed:
-        GREEN_BOLD = "\033[1;32m"
-        RESET = "\033[0m"
-        log.info(f"{GREEN_BOLD} PERFECT! {pred_date}: at least one run matched ALL {total_needed}/{total_needed} numbers!{RESET}")
-    else:
-        log.debug(f"{pred_date}: best of {len(run_match_counts)} runs was {best_match}/{total_needed}")
+    # Regime-specific summaries
+    regime_results = {}
+    for r in [0, 1, 2]:
+        if regime_counts[r] > 0:
+            regime_results[r] = summarize(f"model_regime_{r}", regime_hits[r])
+        else:
+            regime_results[r] = {
+                "name": f"model_regime_{r}",
+                "avg_hits": None,
+                "hit_distribution": {}
+            }
 
-    return (pred_date, run_match_counts, len(actual_numbers))
+    # Logging
+    log.info("=== Overall Accuracy Comparison ===")
+    for r in results:
+        log.info(f"{r['name']}: avg_hits={r['avg_hits']:.4f}, distribution={r['hit_distribution']}")
+
+    log.info("=== Regime-Specific Accuracy ===")
+    for r in [0, 1, 2]:
+        rr = regime_results[r]
+        log.info(f"Regime {r}: avg_hits={rr['avg_hits']}, distribution={rr['hit_distribution']}")
+
+    return {
+        "overall": results,
+        "regime_specific": regime_results
+    }

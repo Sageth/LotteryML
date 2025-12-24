@@ -38,7 +38,6 @@ python lottery.py --gamedir=NJ_Cash4Life --accuracy
 ```
 
 ### Config
-`accuracy_allowance`: Minimum model R² accuracy required to accept predictions. Expressed as a decimal (e.g. 0.05 = 5%).
 
 `ball_game_range_low`: This is the lowest number of the main game
 
@@ -55,12 +54,6 @@ python lottery.py --gamedir=NJ_Cash4Life --accuracy
 `game_balls_extra_low`: Low range of the Powerball, Mega ball, or another ball that can repeat from the main game. 
 
 `game_balls_extra_high`: High range of the Powerball, Mega ball, or another ball that can repeat from the main game. 
-
-`test_size`: Percentage of testing data. 20% is recommended.
-
-`train_size`: Percentage of training data. 80% is recommended.
-
-`timeframe_in_days`: Limits the number of days it looks back. e.g. if the game rules change. Defaults to 60 years.
 
 ---
 

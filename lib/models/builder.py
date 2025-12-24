@@ -1,32 +1,42 @@
 # lib/models/builder.py
-from sklearn.ensemble import (
-    RandomForestRegressor,
-    GradientBoostingRegressor,
-    ExtraTreesRegressor,
-    AdaBoostRegressor,
-    StackingRegressor,
-    RandomForestClassifier
-)
-from sklearn.linear_model import RidgeCV
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 
 
 def build_model():
-    # Used for Ball1 through BallN
-    base_models = [
-        ("rf", RandomForestRegressor(n_estimators=30, max_depth=5)),
-        ("gb", GradientBoostingRegressor(n_estimators=30, max_depth=5)),
-        ("et", ExtraTreesRegressor(n_estimators=30, max_depth=5)),
-        ("ada", AdaBoostRegressor(n_estimators=30))
-    ]
-    final_estimator = RidgeCV()
-    return StackingRegressor(estimators=base_models, final_estimator=final_estimator)
+    """
+    Build a classifier for predicting lottery balls.
+    Classification is more appropriate than regression because
+    lottery balls are discrete categorical outcomes.
+    """
+    return RandomForestClassifier(
+        n_estimators=300,
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        random_state=42,
+        n_jobs=-1
+    )
 
 
 def build_model_classifier():
-    # Used for BallExtra / CashBall / Powerball, etc.
-    return make_pipeline(
-        StandardScaler(),
-        RandomForestClassifier(n_estimators=50, max_depth=4, class_weight="balanced")
+    """
+    Alias for clarity — both main balls and extra balls use classification.
+    """
+    return build_model()
+
+
+def build_model_regressor():
+    """
+    Only used if you explicitly want regression for some auxiliary task.
+    Not used for ball prediction anymore.
+    """
+    return RandomForestRegressor(
+        n_estimators=300,
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        random_state=42,
+        n_jobs=-1
     )

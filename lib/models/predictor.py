@@ -1,3 +1,5 @@
+# lib/models/predictor.py
+
 import os
 import json
 import joblib
@@ -7,60 +9,84 @@ import random
 from datetime import datetime
 import lib.models.builder as builder
 
+
+# ------------------------------------------------------------
+#  Utility: Probability-based sampling with temperature
+# ------------------------------------------------------------
+def _sample_from_proba(model, input_vector, temperature=1.0):
+    """
+    Sample from classifier probabilities with temperature scaling.
+    """
+    proba = model.predict_proba(input_vector)[0]
+    classes = model.classes_
+
+    # Temperature scaling
+    scaled = np.power(proba, 1.0 / max(temperature, 1e-6))
+    scaled /= scaled.sum()
+
+    return int(np.random.choice(classes, p=scaled)), float(np.max(proba))
+
+
+# ------------------------------------------------------------
+#  Statistics preparation
+# ------------------------------------------------------------
 def prepare_statistics(data: pd.DataFrame, config: dict, log):
-    if config.get("ball_game_range_low", None) is None:
-        raise ValueError("Missing 'ball_game_range_low' in config!")
-    data = data.copy()  # Prevent SettingWithCopyWarning
+    data = data.copy()
     data["Date"] = pd.to_datetime(data["Date"])
 
-    # Main ball columns
     ball_cols = [f"Ball{i}" for i in config["game_balls"]]
 
-    # Optionally include extra ball in sum/stats?
-    include_extra_in_sum = config.get("include_extra_in_sum", False)
-    if "game_balls_extra_low" in config and "game_balls_extra_high" in config:
-        extra_ball_col = "BallExtra"
-        if include_extra_in_sum:
-            ball_cols_for_sum = ball_cols + [extra_ball_col]
-        else:
-            ball_cols_for_sum = ball_cols
+    include_extra = config.get("include_extra_in_sum", False)
+    if config.get("game_has_extra", False):
+        extra_col = config["game_extra_col"]
+        ball_cols_for_sum = ball_cols + [extra_col] if include_extra else ball_cols
     else:
         ball_cols_for_sum = ball_cols
 
     data["sum"] = data[ball_cols_for_sum].sum(axis=1)
+
     mean_sum = data["sum"].mean()
     std_sum = data["sum"].std()
     mode_sum = data["sum"].mode()[0]
 
     log.info(f"Statistical Summary: Mean={mean_sum:.2f}, StdDev={std_sum:.2f}, ModeSum={mode_sum}")
 
-    return {"mean": mean_sum, "std": std_sum, "mode": mode_sum, "ball_cols": ball_cols}
+    return {
+        "mean": mean_sum,
+        "std": std_sum,
+        "mode": mode_sum,
+        "ball_cols": ball_cols
+    }
 
+
+# ------------------------------------------------------------
+#  Model training
+# ------------------------------------------------------------
 def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, log, force_retrain=False):
-    # --- Sort and split once ---
     data = data.sort_values("Date").reset_index(drop=True)
 
-    train_ratio = config.get("train_ratio", 0.8)  # default 80% train
+    train_ratio = config.get("train_ratio", 0.8)
     split_idx = int(len(data) * train_ratio)
 
     train_data = data.iloc[:split_idx]
-    test_data  = data.iloc[split_idx:]
+    test_data = data.iloc[split_idx:]
 
     log.info(f"Train draws: {len(train_data)}, Test draws: {len(test_data)}")
 
-    # --- Prepare features ---
-    sum_col = "sum"  # Always lowercase after normalize
+    sum_col = "sum"
     x_train = train_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
-    x_test  = test_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
+    x_test = test_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
 
     models = {}
+    test_scores = {}
 
-    # --- Main game balls ---
+    # --- Main balls ---
     for ball in config["game_balls"]:
         y_train = train_data[f"Ball{ball}"]
-        y_test  = test_data[f"Ball{ball}"]
+        y_test = test_data[f"Ball{ball}"]
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
         if os.path.exists(model_path) and not force_retrain:
             model = joblib.load(model_path)
@@ -71,78 +97,61 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        # Safe feature check
-        if hasattr(model, "feature_names_in_"):
-            try:
-                test_score = model.score(x_test, y_test)
-            except ValueError as e:
-                log.warning(f"Feature mismatch detected for Ball{ball}: {e}. Forcing retrain...")
-                model = builder.build_model()
-                model.fit(x_train, y_train)
-                joblib.dump(model, model_path)
-                test_score = model.score(x_test, y_test)
-        else:
-            log.warning(f"Model for Ball{ball} lacks feature_names_in_; forcing retrain...")
-            model = builder.build_model()
-            model.fit(x_train, y_train)
-            joblib.dump(model, model_path)
-            test_score = model.score(x_test, y_test)
-
-        log.info(f"Ball{ball} test accuracy (future draws): {test_score:.4f}")
+        test_score = model.score(x_test, y_test)
+        test_scores[ball] = test_score
+        log.info(f"Ball{ball} test accuracy: {test_score:.4f}")
 
         models[ball] = model
 
-    # --- Optional Extra ball ---
-    if "game_balls_extra_low" in config and "game_balls_extra_high" in config:
-        y_train = train_data["BallExtra"]
-        log.info(f"BallExtra class distribution: {y_train.value_counts().to_dict()}")
+    # --- Extra ball ---
+    if config.get("game_has_extra", False):
+        extra_col = config["game_extra_col"]
+        y_train = train_data[extra_col]
+        y_test = test_data[extra_col]
 
-        y_test  = test_data["BallExtra"]
-
-        model_path = os.path.join(gamedir, config["model_save_path"], "BallExtra.joblib")
+        model_path = os.path.join(gamedir, config["model_save_path"], f"{extra_col}.joblib")
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
         if os.path.exists(model_path) and not force_retrain:
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")
         else:
-            model = builder.build_model()
+            model = builder.build_model_classifier()
             model.fit(x_train, y_train)
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        # Safe feature check
-        if hasattr(model, "feature_names_in_"):
-            try:
-                test_score = model.score(x_test, y_test)
-            except ValueError as e:
-                log.warning(f"Feature mismatch detected for BallExtra: {e}. Forcing retrain...")
-                model = builder.build_model()
-                model.fit(x_train, y_train)
-                joblib.dump(model, model_path)
-                test_score = model.score(x_test, y_test)
-        else:
-            log.warning(f"Model for BallExtra lacks feature_names_in_; forcing retrain...")
-            model = builder.build_model()
-            model.fit(x_train, y_train)
-            joblib.dump(model, model_path)
-            test_score = model.score(x_test, y_test)
-
-        log.info(f"BallExtra test accuracy (future draws): {test_score:.4f}")
+        test_score = model.score(x_test, y_test)
+        test_scores["extra"] = test_score
+        log.info(f"{extra_col} test accuracy: {test_score:.4f}")
 
         models["extra"] = model
 
-    return models
+    return models, test_scores
 
-def generate_predictions(data, config, models, stats, log, test_mode=False):
+
+# ------------------------------------------------------------
+#  Regime-conditioned temperature selection
+# ------------------------------------------------------------
+def _temperature_for_regime(regime, config):
+    """
+    Choose sampling temperature based on entropy regime.
+    Lower temperature = more deterministic.
+    Higher temperature = more exploratory.
+    """
+    temps = config.get("regime_temperatures", {
+        0: 0.6,   # low entropy → clustering → more deterministic
+        1: 1.0,   # normal entropy
+        2: 1.4    # high entropy → spread → more exploratory
+    })
+    return temps.get(regime, 1.0)
+
+
+# ------------------------------------------------------------
+#  Prediction generation
+# ------------------------------------------------------------
+def generate_predictions(data, config, models, stats, log, test_scores, test_mode=False):
     x_data = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
-
-    # Main game balls targets
-    y_data = {ball: data[f"Ball{ball}"] for ball in config["game_balls"]}
-
-    # Extra ball target (if defined)
-    has_extra = "game_balls_extra_low" in config and "game_balls_extra_high" in config
-    if has_extra:
-        y_extra = data["BallExtra"]
 
     expected_features = list(x_data.columns)
     all_predictions = []
@@ -150,146 +159,114 @@ def generate_predictions(data, config, models, stats, log, test_mode=False):
     today_str = datetime.now().strftime('%Y-%m-%d')
 
     max_runs = config.get("test_prediction_runs", 10)
+    max_retries = config.get("max_prediction_retries", 20)
 
     while runs_completed < max_runs:
-        predictions = []
-        accuracies = []
-        used_numbers = set()
+        retries = 0
 
-        input_vector = x_data.tail(config.get("input_sample_window", 10)).sample(
-            n=1, random_state=random.randint(0, 10000)
-        ).copy()
-        input_vector += np.random.normal(0, config.get("prediction_noise_stddev", 0.05), input_vector.shape)
+        while retries < max_retries:
+            retries += 1
 
-        # Sanity check for feature alignment
-        if any(col not in input_vector.columns for col in expected_features):
-            missing = [col for col in expected_features if col not in input_vector.columns]
-            log.error(f"Missing input features for prediction: {missing}")
-            raise ValueError("Input features do not match model training data")
+            predictions = []
+            confidences = []
+            used_numbers = set()
 
-        valid = True
+            # Sample input vector from recent draws
+            input_vector = x_data.tail(config.get("input_sample_window", 10)).sample(
+                n=1, random_state=random.randint(0, 10000)
+            ).copy()
 
-        # --- Predict main balls ---
-        for ball in config["game_balls"]:
-            model = models[ball]
-            while True:
-                prediction = int(round(model.predict(input_vector)[0]))
-                prediction = max(config["ball_game_range_low"], min(prediction, config["ball_game_range_high"]))
+            # Determine regime for this input
+            regime = int(input_vector["regime"].iloc[0])
+            temperature = _temperature_for_regime(regime, config)
 
-                if config.get("no_duplicates", False) and prediction in used_numbers:
-                    log.warning(f"[Run {runs_completed+1}] Duplicate number {prediction} for Ball{ball}. Retrying run...")
+            valid = True
+
+            # Predict main balls
+            for ball in config["game_balls"]:
+                model = models[ball]
+
+                pred, conf = _sample_from_proba(model, input_vector, temperature)
+
+                # Duplicate check
+                if config.get("no_duplicates", False) and pred in used_numbers:
                     valid = False
                     break
 
-                used_numbers.add(prediction)
-                predictions.append(prediction)
-                score = model.score(x_data, y_data[ball])
-                accuracies.append(score)
-                break
+                used_numbers.add(pred)
+                predictions.append(pred)
+                confidences.append(conf)
 
             if not valid:
-                break
+                continue
 
-        if not valid:
-            continue
+            # Extra ball
+            if config.get("game_has_extra", False):
+                model = models["extra"]
+                pred, conf = _sample_from_proba(model, input_vector, temperature)
+                predictions.append(pred)
+                confidences.append(conf)
 
-        # --- Predict BallExtra if exists ---
-        if has_extra:
-            model = models["extra"]
-            if hasattr(model, "predict_proba"):
-                try:
-                    proba = model.predict_proba(input_vector)[0]
-                    log.debug(f"🔍 BallExtra predict_proba: {proba}")
-                    log.debug(f"🔍 BallExtra model classes_: {model.classes_}")
-                except Exception as e:
-                    log.warning(f"Could not compute predict_proba for BallExtra: {e}")
+            predicted_sum = sum(predictions)
 
-            while True:
-                prediction = int(round(model.predict(input_vector)[0]))
-                prediction = max(config["game_balls_extra_low"], min(prediction, config["game_balls_extra_high"]))
-
-                # ⚠️ Duplicates ARE allowed for extra ball, so no check here
-                predictions.append(prediction)
-                score = model.score(x_data, y_extra)
-                accuracies.append(score)
-                break
-
-        # Log predictions
-        for i, ball in enumerate(config["game_balls"]):
-            log.info(f"[Run {runs_completed+1}] Ball{ball}: {predictions[i]}\tAccuracy: {accuracies[i]:.4f}")
-
-        if has_extra:
-            log.info(f"[Run {runs_completed+1}] BallExtra: {predictions[-1]}\tAccuracy: {accuracies[-1]:.4f}")
-
-        # --- Evaluate checks ---
-        predicted_sum = sum(predictions)
-
-        if test_mode:
-            mean_pass = mode_pass = stddev_pass = accuracy_pass = True
-        else:
-            mean_pass = stats["mean"] * (1 - config["mean_allowance"]) <= predicted_sum <= stats["mean"] * (1 + config["mean_allowance"])
-            mode_pass = stats["mode"] * (1 - config["mode_allowance"]) <= predicted_sum <= stats["mode"] * (1 + config["mode_allowance"])
-            stddev_pass = (stats["mean"] - stats["std"]) <= predicted_sum <= (stats["mean"] + stats["std"])
-            accuracy_pass = all(score > config["accuracy_allowance"] for score in accuracies)
-
-        # --- Save result if passed ---
-        if mean_pass and mode_pass and stddev_pass and accuracy_pass:
-            all_predictions.append({
-                "run": runs_completed + 1,
-                "date": today_str,
-                "predicted": predictions,
-                "accuracy_scores": [round(score, 4) for score in accuracies],
-                "predicted_sum": predicted_sum,
-                "mean_sum": round(stats["mean"], 2),
-                "mode_sum": int(stats["mode"]),
-                "stddev": round(stats["std"], 2),
-                "pass_checks": {
-                    "accuracy": bool(accuracy_pass),
-                    "mean": bool(mean_pass),
-                    "mode": bool(mode_pass),
-                    "stddev": bool(stddev_pass)
-                }
-            })
-
-            log.info(f"\033[1;96m[Run {runs_completed+1}] All checks PASSED\033[0m")
-            runs_completed += 1
-        else:
-            log.warning(f"\033[1;91mPrediction FAILED checks. Retrying...\033[0m")
+            # --- Checks ---
             if test_mode:
-                log.warning("Test mode enabled — skipping retry loop to prevent hang.")
+                passed = True
+            else:
+                mean_pass = stats["mean"] * (1 - config["mean_allowance"]) <= predicted_sum <= stats["mean"] * (1 + config["mean_allowance"])
+                mode_pass = stats["mode"] * (1 - config["mode_allowance"]) <= predicted_sum <= stats["mode"] * (1 + config["mode_allowance"])
+                stddev_pass = (stats["mean"] - stats["std"]) <= predicted_sum <= (stats["mean"] + stats["std"])
+                confidence_pass = all(c >= config.get("min_confidence", 0.01) for c in confidences)
+
+                passed = mean_pass and mode_pass and stddev_pass and confidence_pass
+
+            if passed:
+                all_predictions.append({
+                    "run": runs_completed + 1,
+                    "date": today_str,
+                    "predicted": predictions,
+                    "confidences": [round(c, 4) for c in confidences],
+                    "predicted_sum": predicted_sum,
+                    "regime": regime,
+                    "temperature": temperature,
+                    "mean_sum": round(stats["mean"], 2),
+                    "mode_sum": int(stats["mode"]),
+                    "stddev": round(stats["std"], 2),
+                    "test_scores": test_scores,
+                    "config": {
+                        "game_balls": list(config["game_balls"]),
+                        "game_has_extra": config.get("game_has_extra", False)
+                    }
+                })
+
+                log.info(f"[Run {runs_completed+1}] Regime={regime}, Temp={temperature}, Prediction={predictions}")
                 runs_completed += 1
+                break
+
+        else:
+            log.warning(f"Run {runs_completed+1}: Max retries exceeded, skipping.")
+            runs_completed += 1
 
     return all_predictions
 
+
+# ------------------------------------------------------------
+#  Export predictions
+# ------------------------------------------------------------
 def export_predictions(predictions, gamedir, log):
     today_str = datetime.now().strftime('%Y-%m-%d')
     prediction_path = os.path.join(gamedir, "predictions", f"{today_str}.json")
     os.makedirs(os.path.dirname(prediction_path), exist_ok=True)
 
-    # Optionally post-process to label BallExtra for readability
-    processed_predictions = []
-    for run in predictions:
-        run_copy = run.copy()
-
-        # If game has extra ball (detected by length of predictions list)
-        if "game_balls_extra_low" in run_copy.get("config", {}) and "game_balls_extra_high" in run_copy.get("config", {}):
-            num_main_balls = len(run_copy["config"]["game_balls"])
-        else:
-            # Fallback - infer from this run (assume all runs same length)
-            num_main_balls = run_copy.get("num_main_balls", len(run_copy["predicted"]) - 1 if len(run_copy["predicted"]) > 1 else len(run_copy["predicted"]))
-
-        # Optional pretty structure:
-        run_copy["predicted_main"] = run_copy["predicted"][:num_main_balls]
-        if len(run_copy["predicted"]) > num_main_balls:
-            run_copy["predicted_extra"] = run_copy["predicted"][num_main_balls:]
-
-        processed_predictions.append(run_copy)
-
     with open(prediction_path, "w") as f:
-        json.dump(processed_predictions, f, indent=2)
+        json.dump(predictions, f, indent=2)
 
     log.info(f"All predictions exported to {prediction_path}")
 
+
+# ------------------------------------------------------------
+#  Skip if already predicted today
+# ------------------------------------------------------------
 def should_skip_predictions(gamedir, log) -> bool:
     today_str = datetime.now().strftime('%Y-%m-%d')
     prediction_path = os.path.join(gamedir, "predictions", f"{today_str}.json")

@@ -25,10 +25,8 @@ def test_time_split():
         "ball_game_range_low": 1,
         "ball_game_range_high": 49,
         "model_save_path": "test_models",
-        "train_ratio": 0.8,
         "mean_allowance": 0.1,
         "mode_allowance": 0.1,
-        "accuracy_allowance": 0.5
     }
 
     # Dummy logger

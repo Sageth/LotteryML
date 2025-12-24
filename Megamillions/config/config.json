@@ -1,18 +1,21 @@
 {
-    "accuracy_allowance": 0.70,
-    "mae_allowance": 0.91,
-    "ball_game_range_low": 1,
-    "ball_game_range_high": 70,
-    "mode_allowance": 0.10,
-    "mean_allowance": 0.05,
-    "model_save_path": "models",
-    "game_balls": "range(1, 6)",
-    "game_has_extra": true,
-    "game_extra_name": "MegaBall",
-    "game_extra_col": "BallExtra",
-    "game_balls_extra_low": 1,
-    "game_balls_extra_high": 24,
-    "test_size": 0.20,
-    "train_size": 0.80,
-    "timeframe_in_days": 21900
+  "ball_game_range_low": 1,
+  "ball_game_range_high": 70,
+  "game_balls": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "game_has_extra": true,
+  "game_extra_name": "MegaBall",
+  "game_extra_col": "BallExtra",
+  "game_balls_extra_low": 1,
+  "game_balls_extra_high": 24,
+  "model_save_path": "models",
+  "no_duplicates": true,
+  "train_ratio": 0.80,
+  "mean_allowance": 0.05,
+  "mode_allowance": 0.10
 }

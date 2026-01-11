@@ -2,21 +2,20 @@
 
 import argparse
 import os
+import warnings
+
 from dotenv import load_dotenv
 
 from lib.config.loader import load_config, evaluate_config
 from lib.data.features import engineer_features
+from lib.data.github import GitHubAutoMerge
 from lib.data.io import load_data
 from lib.data.normalize import normalize_features
 from lib.models.accuracy import report_live_accuracy_all
-from lib.models.predictor import (
-    should_skip_predictions,
-    prepare_statistics,
-    build_models,
-    generate_predictions,
-    export_predictions,
-)
-from lib.data.github import GitHubAutoMerge
+from lib.models.predictor import (should_skip_predictions, prepare_statistics, build_models, generate_predictions,
+                                  export_predictions, )
+
+warnings.filterwarnings("ignore", message="`sklearn.utils.parallel.delayed`")
 
 
 # ------------------------------------------------------------
@@ -72,14 +71,10 @@ def run_lottery(gamedir, args):
     stats = prepare_statistics(data, config, log)
 
     log.info("Training or loading models...")
-    models, test_scores = build_models(
-        data, config, gamedir, stats, log, force_retrain=args.force_retrain
-    )
+    models, test_scores = build_models(data, config, gamedir, stats, log, force_retrain=args.force_retrain)
 
     log.info("Generating predictions...")
-    predictions = generate_predictions(
-        data, config, models, stats, log, test_scores, test_mode=args.test_mode
-    )
+    predictions = generate_predictions(data, config, models, stats, log, test_scores, test_mode=args.test_mode)
 
     if args.dry_run:
         log.info("Dry run enabled — not exporting predictions.")
@@ -99,12 +94,8 @@ def run_lottery(gamedir, args):
         if not github_pat or not repo_path or not github_owner or not github_repo:
             log.error("Missing GitHub environment variables. Automerge aborted.")
         else:
-            automator = GitHubAutoMerge(
-                repo_path=repo_path,
-                github_pat=github_pat,
-                github_owner=github_owner,
-                github_repo_name=github_repo,
-            )
+            automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
+                github_repo_name=github_repo, )
             automator.run_automerge_workflow()
 
     log.info("Done.")
@@ -125,10 +116,12 @@ def main():
     parser.add_argument("--test-mode", action="store_true", help="Disable filtering checks for predictions")
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy evaluation (overall)")
     parser.add_argument("--accuracy-regimes", action="store_true", help="Run regime-aware accuracy evaluation")
-    parser.add_argument("--automerge", action="store_true", help="Automatically commit and merge prediction updates to GitHub")
+    parser.add_argument("--automerge", action="store_true",
+                        help="Automatically commit and merge prediction updates to GitHub")
 
     args = parser.parse_args()
     run_lottery(args.gamedir, args)
+
 
 if __name__ == "__main__":
     main()

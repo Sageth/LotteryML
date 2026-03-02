@@ -5,15 +5,13 @@ import numpy as np
 
 
 def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
-    # Identify main ball columns
-    ball_columns = [f"Ball{i}" for i in config["game_balls"]]
+    ball_cols_main = [f"Ball{i}" for i in config["game_balls"]]
+    ball_cols_all = ball_cols_main + (
+        [config["game_extra_col"]] if config.get("game_has_extra", False) else []
+    )
 
-    # Optionally add extra ball column
-    if config.get("game_has_extra", False):
-        ball_columns.append(config["game_extra_col"])
-
-    # --- FILTER invalid rows ---
-    valid_rows = data[[f"Ball{i}" for i in config["game_balls"]]].apply(
+    # === 1. Filter invalid rows ===
+    valid_rows = data[ball_cols_main].apply(
         lambda row: all(
             config["ball_game_range_low"] <= n <= config["ball_game_range_high"]
             for n in row
@@ -36,152 +34,116 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             f"Filtered out {num_removed} draw(s) with balls outside valid ranges"
         )
 
-    # Work only with filtered data
     data = filtered_data.reset_index(drop=True)
+    n = len(data)
 
-    # --- LAG FEATURES ---
+    # === 2. Lag features (vectorized) ===
     lag_window = config.get("lag_window", 5)
-
     for lag in range(1, lag_window + 1):
-        lagged = data[[f"Ball{i}" for i in config["game_balls"]]].shift(lag)
-
-        for col in [f"Ball{i}" for i in config["game_balls"]]:
+        lagged = data[ball_cols_main].shift(lag)
+        for col in ball_cols_main:
             data[f"{col}_lag{lag}_appeared"] = (lagged[col] == data[col]).astype(int)
 
-    # --- RECENT COUNT FEATURES (fixed) ---
-    for col in [f"Ball{i}" for i in config["game_balls"]]:
+    # === 3. Recent count features (vectorized via rolling one-hot) ===
+    for col in ball_cols_main:
+        # shift(1) excludes the current row from its own window count
+        shifted_dummies = pd.get_dummies(data[col]).shift(1).fillna(0)
+        col_idx_map = {v: i for i, v in enumerate(shifted_dummies.columns)}
+        row_col_indices = data[col].map(col_idx_map).fillna(0).astype(int).values
         for window in [5, 10, 20]:
-            counts = []
-            for idx in range(len(data)):
-                start = max(0, idx - window)
-                window_vals = data[col].iloc[start:idx]  # exclude current row
-                current_val = data[col].iloc[idx]
-                counts.append((window_vals == current_val).sum())
-            data[f"{col}_recent_count_{window}"] = counts
+            rolling_w = shifted_dummies.rolling(window, min_periods=1).sum()
+            data[f"{col}_recent_count_{window}"] = rolling_w.values[
+                np.arange(n), row_col_indices
+            ]
 
-    # --- GLOBAL FREQUENCY (long-term bias) ---
-    flat_numbers = data[[f"Ball{i}" for i in config["game_balls"]]].values.flatten()
+    # === 4. Global frequency (long-term bias) ===
+    flat_numbers = data[ball_cols_main].values.flatten()
     global_frequency = pd.Series(flat_numbers).value_counts().to_dict()
 
-    # --- GAP TRACKING (time since last seen) ---
-    number_last_seen = {
-        n: None
-        for n in range(
-            config["ball_game_range_low"], config["ball_game_range_high"] + 1
+    # === 5. Sum and sum_zscore (vectorized) ===
+    # Window of 11 = current row + up to 10 preceding, matching original slice behavior
+    data["sum"] = data[ball_cols_main].sum(axis=1)
+    rolling_sum = data["sum"].rolling(11, min_periods=1)
+    rolling_std = rolling_sum.std().fillna(0)
+    data["sum_zscore"] = (data["sum"] - rolling_sum.mean()) / (rolling_std + 1e-6)
+
+    # === 6. Even/odd count (vectorized) ===
+    ball_arr_all = data[ball_cols_all].values
+    even_mask = ball_arr_all % 2 == 0
+    data["even_count"] = even_mask.sum(axis=1)
+    data["odd_count"] = (~even_mask).sum(axis=1)
+
+    # === 7. Multi-scale entropy (numpy — avoids pandas overhead per row) ===
+    entropy_windows = sorted(set(config.get("entropy_windows", [10, 25, 50])))
+    ball_arr = data[ball_cols_main].values  # (n, n_balls) numpy array
+
+    for w in entropy_windows:
+        entropies = np.zeros(n)
+        for i in range(1, n):
+            flat = ball_arr[max(0, i - w):i].ravel()
+            _, counts = np.unique(flat, return_counts=True)
+            probs = counts / counts.sum()
+            entropies[i] = -(probs * np.log(probs + 1e-12)).sum()
+        data[f"entropy_{w}"] = entropies
+
+    # Primary entropy field (middle window for backward compatibility)
+    if entropy_windows:
+        mid_w = entropy_windows[len(entropy_windows) // 2]
+        data["entropy"] = data[f"entropy_{mid_w}"]
+    else:
+        data["entropy"] = 0.0
+
+    # Entropy trend (largest minus smallest window)
+    if len(entropy_windows) >= 2:
+        data["entropy_trend"] = (
+            data[f"entropy_{entropy_windows[-1]}"]
+            - data[f"entropy_{entropy_windows[0]}"]
         )
-    }
+    else:
+        data["entropy_trend"] = 0.0
 
-    feature_rows = []
-
-    # Entropy windows (multi-scale)
-    entropy_windows = config.get("entropy_windows", [10, 25, 50])
-    # Ensure deterministic ordering and uniqueness
-    entropy_windows = sorted(set(entropy_windows))
-
-    # Optional thresholds for regime classification
+    # === 8. Regime classification (vectorized) ===
     low_thr = config.get("entropy_low_threshold", None)
     high_thr = config.get("entropy_high_threshold", None)
+    entropy_main = data["entropy"].values
 
-    # Precompute max window for efficient slicing
-    max_entropy_window = max(entropy_windows) if entropy_windows else 0
-
-    for idx, row in data.iterrows():
-        row_features = {}
-
-        # Rolling window for z-score (using main balls only)
-        window = data.iloc[max(0, idx - 10) : idx + 1][
-            [f"Ball{i}" for i in config["game_balls"]]
-        ]
-
-        row_features["sum"] = row[[f"Ball{i}" for i in config["game_balls"]]].sum()
-        row_features["sum_zscore"] = (
-            row_features["sum"] - window.sum(axis=1).mean()
-        ) / (window.sum(axis=1).std() + 1e-6)
-
-        row_features["even_count"] = sum(1 for n in row[ball_columns] if n % 2 == 0)
-        row_features["odd_count"] = sum(1 for n in row[ball_columns] if n % 2 != 0)
-
-        # --- MULTI-SCALE ENTROPY FEATURES ---
-        entropy_values = {}
-        for w in entropy_windows:
-            recent_draws = data[
-                [f"Ball{i}" for i in config["game_balls"]]
-            ].iloc[max(0, idx - w) : idx]
-
-            if len(recent_draws) > 0:
-                flat = recent_draws.values.flatten()
-                counts = pd.Series(flat).value_counts(normalize=True)
-                entropy_w = -(counts * np.log(counts + 1e-12)).sum()
-            else:
-                entropy_w = 0.0
-
-            key = f"entropy_{w}"
-            entropy_values[key] = entropy_w
-            row_features[key] = entropy_w
-
-        # Primary entropy field (for backward compatibility)
-        # Use the middle window (if exists) or the largest window
-        if entropy_windows:
-            mid_idx = len(entropy_windows) // 2
-            main_w = entropy_windows[mid_idx]
-            row_features["entropy"] = entropy_values[f"entropy_{main_w}"]
-        else:
-            row_features["entropy"] = 0.0
-
-        # --- ENTROPY TREND (difference between largest and smallest window) ---
-        if len(entropy_windows) >= 2:
-            small_w = entropy_windows[0]
-            large_w = entropy_windows[-1]
-            row_features["entropy_trend"] = (
-                entropy_values[f"entropy_{large_w}"]
-                - entropy_values[f"entropy_{small_w}"]
-            )
-        else:
-            row_features["entropy_trend"] = 0.0
-
-        # --- REGIME CLASSIFICATION ---
-        # Regime: 0 = low entropy (clustering), 1 = normal, 2 = high entropy (spread)
-        entropy_for_regime = row_features["entropy"]
-
-        # If thresholds not provided, derive simple defaults based on typical entropy range
-        # These can be overridden in config for finer control.
+    if entropy_windows:
+        entropy_arr = data[[f"entropy_{w}" for w in entropy_windows]].values  # (n, k)
         if low_thr is None or high_thr is None:
-            # Very rough defaults; model will still learn from continuous entropy_* features.
-            # You can tune these per game via config.
-            low_thr_eff = np.percentile(
-                [v for v in entropy_values.values()], 33
-            ) if entropy_values else 0.0
-            high_thr_eff = np.percentile(
-                [v for v in entropy_values.values()], 66
-            ) if entropy_values else 0.0
+            # Per-row percentiles across entropy scales — matches original per-row behavior
+            low_thr_arr = np.percentile(entropy_arr, 33, axis=1)
+            high_thr_arr = np.percentile(entropy_arr, 66, axis=1)
         else:
-            low_thr_eff = low_thr
-            high_thr_eff = high_thr
+            low_thr_arr = np.full(n, low_thr)
+            high_thr_arr = np.full(n, high_thr)
+    else:
+        low_thr_arr = np.zeros(n)
+        high_thr_arr = np.zeros(n)
 
-        if entropy_for_regime < low_thr_eff:
-            regime = 0
-        elif entropy_for_regime > high_thr_eff:
-            regime = 2
-        else:
-            regime = 1
+    data["regime"] = np.where(
+        entropy_main < low_thr_arr, 0,
+        np.where(entropy_main > high_thr_arr, 2, 1)
+    )
 
-        row_features["regime"] = regime
+    # === 9. Global frequency per ball (vectorized lookup) ===
+    for col in ball_cols_main:
+        data[f"{col}_global_freq"] = data[col].map(global_frequency).fillna(0).astype(int)
 
-        # --- GLOBAL FREQUENCY + GAP FEATURES PER BALL ---
-        for col in [f"Ball{i}" for i in config["game_balls"]]:
-            val = row[col]
+    # === 10. Gap tracking (sequential — state-dependent with within-row updates) ===
+    number_last_seen = {
+        num: None
+        for num in range(config["ball_game_range_low"], config["ball_game_range_high"] + 1)
+    }
+    gap_arrays = {col: np.empty(n, dtype=int) for col in ball_cols_main}
 
-            # Global frequency
-            row_features[f"{col}_global_freq"] = global_frequency.get(val, 0)
+    for i in range(n):
+        for col in ball_cols_main:
+            val = int(data[col].iat[i])
+            last_seen = number_last_seen.get(val)
+            gap_arrays[col][i] = (i - last_seen) if last_seen is not None else -1
+            number_last_seen[val] = i
 
-            # Gap (time since last seen)
-            last_seen = number_last_seen.get(val, None)
-            row_features[f"{col}_gap"] = (idx - last_seen) if last_seen is not None else -1
-            number_last_seen[val] = idx
-
-        feature_rows.append(row_features)
-
-    feature_df = pd.DataFrame(feature_rows)
-    data = pd.concat([data.reset_index(drop=True), feature_df], axis=1)
+    for col in ball_cols_main:
+        data[f"{col}_gap"] = gap_arrays[col]
 
     return data

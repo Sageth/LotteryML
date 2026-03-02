@@ -11,34 +11,34 @@ cd $GIT_DIR
 find $GIT_DIR -name "*.joblib" -delete
 
 if [ "$CURRENT_DAY" == "Sunday" ]; then
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
 elif [ "$CURRENT_DAY" == "Monday" ]; then
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Pick6 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir Powerball --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Pick6 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py Powerball --automerge
 elif [ "$CURRENT_DAY" == "Tuesday" ]; then 
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir Megamillions --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py Megamillions --automerge
 elif [ "$CURRENT_DAY" == "Wednesday" ]; then 
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir Powerball --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py Powerball --automerge
 elif [ "$CURRENT_DAY" == "Thursday" ]; then 
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Pick6 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Pick6 --automerge
 elif [ "$CURRENT_DAY" == "Friday" ]; then 
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir Megamillions --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py Megamillions --automerge
 elif [ "$CURRENT_DAY" == "Saturday" ]; then 
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash4Life --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Cash5 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir NJ_Pick6 --automerge
-  $VENV_DIR/python $GIT_DIR/lottery.py --gamedir Powerball --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash4Life --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Cash5 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py NJ_Pick6 --automerge
+  $VENV_DIR/python $GIT_DIR/lottery.py Powerball --automerge
 fi
 
 exit

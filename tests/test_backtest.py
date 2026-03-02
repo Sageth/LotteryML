@@ -6,6 +6,7 @@ from lib.data.normalize import normalize_features
 from lib.config.loader import load_config, evaluate_config
 import lib.models.builder as builder
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestClassifier
 import shutil
 import os
 
@@ -34,7 +35,7 @@ def test_backtest_pipeline():
     log = DummyLog()
 
     # Monkey-patch fast model
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -58,7 +59,7 @@ def test_backtest_pipeline():
 
     # --- Train model on train_data ---
     stats = prepare_statistics(train_data, config, log)
-    models = build_models(train_data, config, ".", stats, log, force_retrain=force_retrain)
+    models, _ = build_models(train_data, config, ".", stats, log, force_retrain=force_retrain)
 
     # --- Generate predictions on test_data ---
     test_stats = prepare_statistics(test_data, config, log)

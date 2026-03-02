@@ -1,9 +1,21 @@
 import pytest
 import os
 import shutil
+from pathlib import Path
 from lib.config.loader import load_config, evaluate_config
 import pandas as pd
 import numpy as np
+import lib.models.builder as _builder_module
+
+
+@pytest.fixture(autouse=True)
+def _restore_builder():
+    """Restore builder.build_model after each test to prevent test pollution."""
+    original = _builder_module.build_model
+    yield
+    _builder_module.build_model = original
+
+GAME_DIR = "NJ_Pick6"
 
 @pytest.fixture
 def dummy_log():
@@ -14,22 +26,30 @@ def dummy_log():
     return DummyLog()
 
 @pytest.fixture
+def logger(dummy_log):
+    return dummy_log
+
+@pytest.fixture
+def game_dir():
+    return Path(GAME_DIR)
+
+@pytest.fixture
 def test_config():
-    config = evaluate_config(load_config("NJ_Pick6"))
+    config = evaluate_config(load_config(GAME_DIR))
     # Add any test overrides here
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
     return config
 
 @pytest.fixture
-def clean_model_dir(test_config):
-    # Clean model save dir
-    if os.path.exists(test_config["model_save_path"]):
-        shutil.rmtree(test_config["model_save_path"])
-    os.makedirs(test_config["model_save_path"], exist_ok=True)
+def clean_model_dir(test_config, game_dir):
+    model_dir = game_dir / test_config["model_save_path"]
+    if model_dir.exists():
+        shutil.rmtree(model_dir)
+    model_dir.mkdir(parents=True, exist_ok=True)
     yield  # let test run
     # Cleanup after test
-    shutil.rmtree(test_config["model_save_path"])
+    shutil.rmtree(model_dir)
 
 @pytest.fixture
 def dummy_data(test_config):

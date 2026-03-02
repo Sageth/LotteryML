@@ -46,7 +46,7 @@ def test_time_split():
     os.makedirs(config["model_save_path"], exist_ok=True)
 
     # Run build_models
-    models = build_models(data, config, ".", stats, log)
+    models, _ = build_models(data, config, ".", stats, log)
 
     # Check models built
     assert isinstance(models, dict), "Models output is not a dict"

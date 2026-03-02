@@ -31,6 +31,9 @@ def _sample_from_proba(model, input_vector, temperature=1.0):
 #  Statistics preparation
 # ------------------------------------------------------------
 def prepare_statistics(data: pd.DataFrame, config: dict, log):
+    if "ball_game_range_low" not in config:
+        raise ValueError("Missing 'ball_game_range_low' in config")
+
     data = data.copy()
     data["Date"] = pd.to_datetime(data["Date"])
 
@@ -150,16 +153,28 @@ def _temperature_for_regime(regime, config):
 # ------------------------------------------------------------
 #  Prediction generation
 # ------------------------------------------------------------
-def generate_predictions(data, config, models, stats, log, test_scores, test_mode=False):
+def generate_predictions(data, config, models, stats, log, test_scores=None, test_mode=False):
     x_data = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
 
-    expected_features = list(x_data.columns)
     all_predictions = []
     runs_completed = 0
     today_str = datetime.now().strftime('%Y-%m-%d')
 
     max_runs = config.get("test_prediction_runs", 10)
     max_retries = config.get("max_prediction_retries", 20)
+
+    # Hoist loop-invariant config/stats lookups
+    num_main = len(config["game_balls"])
+    game_has_extra = config.get("game_has_extra", False)
+    include_extra_in_sum = config.get("include_extra_in_sum", False)
+    no_duplicates = config.get("no_duplicates", False)
+    input_sample_window = config.get("input_sample_window", 10)
+    min_confidence = config.get("min_confidence", 0.01)
+    mean_allowance = config["mean_allowance"]
+    mode_allowance = config["mode_allowance"]
+    stat_mean = stats["mean"]
+    stat_std = stats["std"]
+    stat_mode = stats["mode"]
 
     while runs_completed < max_runs:
         retries = 0
@@ -172,7 +187,7 @@ def generate_predictions(data, config, models, stats, log, test_scores, test_mod
             used_numbers = set()
 
             # Sample input vector from recent draws
-            input_vector = x_data.tail(config.get("input_sample_window", 10)).sample(
+            input_vector = x_data.tail(input_sample_window).sample(
                 n=1, random_state=random.randint(0, 10000)
             ).copy()
 
@@ -189,7 +204,7 @@ def generate_predictions(data, config, models, stats, log, test_scores, test_mod
                 pred, conf = _sample_from_proba(model, input_vector, temperature)
 
                 # Duplicate check
-                if config.get("no_duplicates", False) and pred in used_numbers:
+                if no_duplicates and pred in used_numbers:
                     valid = False
                     break
 
@@ -201,22 +216,25 @@ def generate_predictions(data, config, models, stats, log, test_scores, test_mod
                 continue
 
             # Extra ball
-            if config.get("game_has_extra", False):
+            if game_has_extra:
                 model = models["extra"]
                 pred, conf = _sample_from_proba(model, input_vector, temperature)
                 predictions.append(pred)
                 confidences.append(conf)
 
-            predicted_sum = sum(predictions)
+            if game_has_extra and not include_extra_in_sum:
+                predicted_sum = sum(predictions[:num_main])
+            else:
+                predicted_sum = sum(predictions)
 
             # --- Checks ---
             if test_mode:
                 passed = True
             else:
-                mean_pass = stats["mean"] * (1 - config["mean_allowance"]) <= predicted_sum <= stats["mean"] * (1 + config["mean_allowance"])
-                mode_pass = stats["mode"] * (1 - config["mode_allowance"]) <= predicted_sum <= stats["mode"] * (1 + config["mode_allowance"])
-                stddev_pass = (stats["mean"] - stats["std"]) <= predicted_sum <= (stats["mean"] + stats["std"])
-                confidence_pass = all(c >= config.get("min_confidence", 0.01) for c in confidences)
+                mean_pass = stat_mean * (1 - mean_allowance) <= predicted_sum <= stat_mean * (1 + mean_allowance)
+                mode_pass = stat_mode * (1 - mode_allowance) <= predicted_sum <= stat_mode * (1 + mode_allowance)
+                stddev_pass = (stat_mean - stat_std) <= predicted_sum <= (stat_mean + stat_std)
+                confidence_pass = all(c >= min_confidence for c in confidences)
 
                 passed = mean_pass and mode_pass and stddev_pass and confidence_pass
 

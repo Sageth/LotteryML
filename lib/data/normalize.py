@@ -47,6 +47,9 @@ def normalize_features(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     means = train_data[continuous_cols].mean()
     stds = train_data[continuous_cols].std().replace(0, 1)
 
+    # Fill NaN with training means before normalizing
+    data[continuous_cols] = data[continuous_cols].fillna(means)
+
     # Apply normalization
     data[continuous_cols] = (data[continuous_cols] - means) / stds
 

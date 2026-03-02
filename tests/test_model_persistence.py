@@ -51,7 +51,7 @@ def test_model_persistence():
     stats = prepare_statistics(data, config, log)
 
     # Build models and save
-    models_before = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
+    models_before, _ = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
 
     # Check that model files exist!
     for ball in config["game_balls"]:

@@ -5,6 +5,7 @@ import shutil
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestClassifier
 import lib.models.builder as builder
 from lib.models.predictor import prepare_statistics, build_models, generate_predictions
 from lib.data.features import engineer_features
@@ -41,7 +42,7 @@ def test_predictor_pipeline():
 
     log = DummyLog()
 
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -55,7 +56,7 @@ def test_predictor_pipeline():
     data = normalize_features(data, config)
     stats = prepare_statistics(data, config, log)
 
-    models = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
+    models, _ = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
 
     predictions = generate_predictions(data, config, models, stats, log, test_mode=True)
 
@@ -84,7 +85,7 @@ def test_predictor_pipeline_extra_ball():
         ) for _ in range(100)])
 
     log = DummyLog()
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -98,7 +99,7 @@ def test_predictor_pipeline_extra_ball():
     data = normalize_features(data, config)
     stats = prepare_statistics(data, config, log)
 
-    models = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
+    models, _ = build_models(data, config, ".", stats, log, force_retrain=force_retrain)
 
     predictions = generate_predictions(data, config, models, stats, log, test_mode=True)
 

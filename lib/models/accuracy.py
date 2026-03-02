@@ -1,8 +1,10 @@
 # lib/models/accuracy.py
 
+import json
+import os
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
 
 
 # ------------------------------------------------------------
@@ -83,22 +85,111 @@ def _recency_weighted_draw(recency_map, config):
 # Compute frequency and recency maps
 # ------------------------------------------------------------
 def _compute_frequency_and_recency(data, config):
-    flat = data[[f"Ball{i}" for i in config["game_balls"]]].values.flatten()
+    ball_cols = [f"Ball{i}" for i in config["game_balls"]]
+    flat = data[ball_cols].values.flatten()
     freq_map = pd.Series(flat).value_counts().to_dict()
 
-    recency_map = {}
-    for n in range(config["ball_game_range_low"], config["ball_game_range_high"] + 1):
-        last_seen = data.apply(lambda row: n in row.values, axis=1).to_numpy()[::-1]
-        idx = np.argmax(last_seen) if last_seen.any() else len(data)
-        recency_map[n] = idx
+    n_rows = len(data)
+    # Melt all ball columns into (row_index, number) pairs, then find the last
+    # row index where each number appeared — O(n_rows * n_balls) vs O(range * n_rows)
+    melted = (
+        data[ball_cols]
+        .reset_index()
+        .melt(id_vars="index", value_vars=ball_cols, value_name="number")
+    )
+    last_seen_row = melted.groupby("number")["index"].max()
+
+    recency_map = {
+        num: (n_rows - 1 - int(last_seen_row[num])) if num in last_seen_row.index else n_rows
+        for num in range(config["ball_game_range_low"], config["ball_game_range_high"] + 1)
+    }
 
     return freq_map, recency_map
 
 
 # ------------------------------------------------------------
-# Main accuracy evaluation
+# Live accuracy: single prediction file vs. actual draw
+# ------------------------------------------------------------
+def report_live_accuracy(gamedir, log, config, df, pred_file):
+    """
+    Compare one prediction JSON file to the actual draw for that date.
+    Returns (date_str, best_match, total_numbers) or None if no matching draw.
+    """
+    date_str = os.path.splitext(os.path.basename(pred_file))[0]
+
+    match = df[df["Date"] == date_str]
+    if match.empty:
+        log.info(f"{date_str}: No actual draw found, skipping.")
+        return None
+
+    actual_row = match.iloc[0]
+    ball_cols = [f"Ball{i}" for i in config["game_balls"]]
+    actual = [actual_row[col] for col in ball_cols]
+    if config.get("game_has_extra", False):
+        actual.append(actual_row[config["game_extra_col"]])
+
+    total_numbers = len(actual)
+
+    with open(pred_file) as f:
+        predictions = json.load(f)
+
+    best_match = max(
+        (_count_hits(run.get("predicted", []), actual) for run in predictions),
+        default=0
+    )
+
+    if best_match == total_numbers:
+        log.info(f"{date_str}: PERFECT match! {best_match}/{total_numbers}")
+    else:
+        log.info(f"{date_str}: Best match {best_match}/{total_numbers}")
+
+    return date_str, best_match, total_numbers
+
+
+# ------------------------------------------------------------
+# Live accuracy: scan all prediction files
 # ------------------------------------------------------------
 def report_live_accuracy_all(gamedir, log):
+    """
+    Compare all prediction files in <gamedir>/predictions/ to actual draws.
+    Logs a summary at the end.
+    """
+    from lib.data.io import load_data
+    from lib.config.loader import load_config, evaluate_config
+
+    config = evaluate_config(load_config(gamedir))
+    df = load_data(gamedir)
+    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+
+    predictions_dir = os.path.join(gamedir, "predictions")
+    pred_files = sorted([
+        os.path.join(predictions_dir, f)
+        for f in os.listdir(predictions_dir)
+        if f.endswith(".json")
+    ]) if os.path.isdir(predictions_dir) else []
+
+    if not pred_files:
+        log.warning("No predictions found")
+        return
+
+    results = [
+        report_live_accuracy(gamedir, log, config, df, pf)
+        for pf in pred_files
+    ]
+    results = [r for r in results if r is not None]
+
+    if not results:
+        log.info("Summary: No matched draws found.")
+        return
+
+    avg_hits = sum(r[1] for r in results) / len(results)
+    log.info(f"Summary: {len(results)} draws evaluated, avg hits: {avg_hits:.2f}")
+
+
+# ------------------------------------------------------------
+# ML-based model evaluation vs. baselines
+# ------------------------------------------------------------
+def evaluate_model_accuracy(gamedir, log):
     """
     Evaluate model accuracy vs. multiple baselines,
     including regime-specific accuracy.

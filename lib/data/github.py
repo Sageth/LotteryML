@@ -42,14 +42,11 @@ class GitHubAutoMerge:
             # Initialize GitPython repository object
             self.repo = git.Repo(self.repo_path)
 
-            # Configure GPG signing from environment variables
+            # Configure commit signing from environment variables
             self.signing_key = os.getenv("GIT_SIGNING_KEY")
             self.sign_commits = os.getenv("GIT_SIGN_COMMITS", "false").lower() == "true"
-            if self.sign_commits and self.signing_key:
-                # Set signing key for this repo only
-                self.repo.git.config("user.signingkey", self.signing_key, "--local")
-                self.repo.git.config("commit.gpgsign", "true", "--local")
-                print(f"GPG signing enabled for repo using key {self.signing_key}.")
+            if self.sign_commits:
+                print(f"Commit signing enabled.")
 
             # Initialize PyGithub client
             self.g = Github(self.github_pat)
@@ -89,6 +86,15 @@ class GitHubAutoMerge:
             print("Initialization failed. Cannot proceed.")
             return
 
+        # Ensure we start from a clean, up-to-date main branch
+        print(f"Checking out '{self.main_branch}' and pulling latest changes...")
+        try:
+            self.repo.git.checkout(self.main_branch)
+            self.repo.git.pull(self.remote_name, self.main_branch)
+        except Exception as e:
+            print(f"Failed to sync with '{self.main_branch}': {e}")
+            return
+
         # Stage all new, modified, and deleted files using `git add -A`
         print("Staging all modified and untracked files...")
         try:
@@ -103,14 +109,13 @@ class GitHubAutoMerge:
             return
 
         # Define branch names and commit message
-        current_branch = self.repo.active_branch.name
         new_branch_name = f'automerge-branch-{os.urandom(4).hex()}'
         commit_message = f"Auto: Update files via automerge"
         pr_title = f"Auto: Updates via automerge"
         pr_body = f"This PR contains automated updates."
 
         try:
-            # Create and checkout new branch
+            # Create and checkout new branch from main
             new_branch = self.repo.create_head(new_branch_name)
             new_branch.checkout()
 
@@ -130,18 +135,23 @@ class GitHubAutoMerge:
 
             # Create the pull request
             print("Creating pull request...")
-            pr = self.github_repo.create_pull(title=pr_title, body=pr_body, head=new_branch_name, base=current_branch)
+            pr = self.github_repo.create_pull(title=pr_title, body=pr_body, head=new_branch_name, base=self.main_branch)
             print(f"Pull request created: {pr.html_url}")
 
             print("Automerge is enabled. Merging the PR...")
             pr.merge()
             print("Pull request merged successfully.")
 
-            # Switch back to the original branch before pulling
+            # Delete the remote branch after a successful merge
+            try:
+                self.repo.git.push(self.remote_name, '--delete', new_branch_name)
+                print(f"Deleted remote branch '{new_branch_name}'.")
+            except Exception as e:
+                print(f"Warning: could not delete remote branch '{new_branch_name}': {e}")
+
+            # Switch back to main and pull the merged result
             self.repo.git.checkout(self.main_branch)
             print(f"Switched to local branch '{self.main_branch}'.")
-
-            # Pull the latest changes from the remote to the local branch
             self.repo.git.pull(self.remote_name, self.main_branch)
             print(f"Pulled latest changes to local branch '{self.main_branch}'.")
 
@@ -150,6 +160,11 @@ class GitHubAutoMerge:
         except Exception as e:
             print(f"GitHub API operation failed: {e}")
         finally:
-            # Force delete the local branch to avoid the "not fully merged" error
-            self.repo.delete_head(new_branch_name, force=True)
-            print(f"Deleted local branch '{new_branch_name}'.")
+            try:
+                # Ensure we are not on the branch before deleting it
+                if self.repo.active_branch.name == new_branch_name:
+                    self.repo.git.checkout(self.main_branch)
+                self.repo.delete_head(new_branch_name, force=True)
+                print(f"Deleted local branch '{new_branch_name}'.")
+            except Exception as e:
+                print(f"Warning: could not delete local branch '{new_branch_name}': {e}")

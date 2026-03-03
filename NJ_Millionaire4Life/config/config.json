@@ -1,0 +1,21 @@
+{
+  "ball_game_range_low": 1,
+  "ball_game_range_high": 58,
+  "game_balls": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "game_has_extra": true,
+  "game_extra_name": "MillionaireBall",
+  "game_extra_col": "BallMillionaire",
+  "game_balls_extra_low": 1,
+  "game_balls_extra_high": 5,
+  "model_save_path": "models",
+  "no_duplicates": true,
+  "train_ratio": 0.80,
+  "mean_allowance": 0.05,
+  "mode_allowance": 0.10
+}

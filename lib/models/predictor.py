@@ -180,16 +180,30 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     data = data.sort_values("Date").reset_index(drop=True)
 
     train_ratio = config.get("train_ratio", 0.8)
-    split_idx = int(len(data) * train_ratio)
 
-    train_data = data.iloc[:split_idx]
-    test_data = data.iloc[split_idx:]
-
-    log.info(f"Train draws: {len(train_data)}, Test draws: {len(test_data)}")
-
+    # Shift targets by 1: train on (features of draw i) → (balls of draw i+1).
+    # This matches the inference pattern in generate_predictions, which uses the
+    # latest known draw's features to predict the *next* draw.  Without this
+    # shift, ball-specific features (gap, recent_count, pos_freq, etc.) that are
+    # computed from the current row's own ball values become tautological — the
+    # model just decodes the target from features that encode it, producing
+    # ~99% training accuracy that doesn't reflect real predictive ability.
     sum_col = "sum"
-    x_train = train_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
-    x_test = test_data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col])
+    drop_cols = ["Date"] + stats["ball_cols"] + [sum_col]
+    # Include extra ball col in shifted targets if present
+    target_cols = stats["ball_cols"] + (
+        [config["game_extra_col"]] if config.get("game_has_extra", False) else []
+    )
+    x_all = data.drop(columns=drop_cols).iloc[:-1]       # rows 0..n-2
+    y_all = data[target_cols].shift(-1).iloc[:-1]         # targets: rows 1..n-1
+
+    split_idx     = int(len(x_all) * train_ratio)
+    x_train       = x_all.iloc[:split_idx]
+    x_test        = x_all.iloc[split_idx:]
+    y_train_frame = y_all.iloc[:split_idx]
+    y_test_frame  = y_all.iloc[split_idx:]
+
+    log.info(f"Train draws: {len(x_train)}, Test draws: {len(x_test)}")
 
     models = {}
     test_scores = {}
@@ -205,7 +219,7 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     # --- Multi-output stacking: train on all balls at once, inject predictions as features ---
     mo_model_path = os.path.join(gamedir, config["model_save_path"], "MultiOutput.joblib")
-    y_train_all = train_data[[f"Ball{b}" for b in config["game_balls"]]]
+    y_train_all = y_train_frame
     if os.path.exists(mo_model_path) and not force_retrain:
         mo_model = joblib.load(mo_model_path)
         log.info(f"Loaded existing multi-output model: {mo_model_path}")
@@ -238,8 +252,8 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     # --- Main balls ---
     for ball in config["game_balls"]:
-        y_train = train_data[f"Ball{ball}"]
-        y_test  = test_data[f"Ball{ball}"]
+        y_train = y_train_frame[f"Ball{ball}"]
+        y_test  = y_test_frame[f"Ball{ball}"]
 
         x_train_ball = x_train.copy()
         x_test_ball  = x_test.copy()
@@ -316,8 +330,8 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     # --- Extra ball ---
     if config.get("game_has_extra", False):
         extra_col = config["game_extra_col"]
-        y_train   = train_data[extra_col]
-        y_test    = test_data[extra_col]
+        y_train   = y_train_frame[extra_col]
+        y_test    = y_test_frame[extra_col]
 
         cal_idx  = int(len(x_train) * (1 - cal_ratio))
         x_fit_ex = x_train.iloc[:cal_idx].copy()

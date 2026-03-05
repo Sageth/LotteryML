@@ -217,8 +217,11 @@ def evaluate_model_accuracy(gamedir, log):
     # Compute frequency and recency maps
     freq_map, recency_map = _compute_frequency_and_recency(data, config)
 
-    # Evaluate only on test set (no leakage)
+    # Evaluate only on test set (no leakage).
+    # Use shifted pairs: predict row i+1's balls from row i's features,
+    # matching the training setup and inference pattern.
     test_data = data.tail(int(len(data) * (1 - config.get("train_ratio", 0.8))))
+    test_rows = list(test_data.iterrows())
 
     # Storage
     model_hits = []
@@ -230,16 +233,19 @@ def evaluate_model_accuracy(gamedir, log):
     regime_hits = {0: [], 1: [], 2: []}
     regime_counts = {0: 0, 1: 0, 2: 0}
 
-    for _, row in test_data.iterrows():
-        actual = [row[f"Ball{i}"] for i in config["game_balls"]]
-        if config.get("game_has_extra", False):
-            actual.append(row[config["game_extra_col"]])
+    for idx in range(len(test_rows) - 1):
+        _, row      = test_rows[idx]       # features from draw i
+        _, next_row = test_rows[idx + 1]   # actual balls from draw i+1
 
-        # Extract regime for this row
+        actual = [next_row[f"Ball{i}"] for i in config["game_balls"]]
+        if config.get("game_has_extra", False):
+            actual.append(next_row[config["game_extra_col"]])
+
+        # Extract regime from the input row (draw i)
         regime = int(row["regime"])
         regime_counts[regime] += 1
 
-        # Prepare input vector
+        # Prepare input vector from draw i
         x_row = row.drop(labels=["Date"] + stats["ball_cols"] + ["sum"]).to_frame().T
 
         # Multi-output stacking: enrich input with global RF predictions

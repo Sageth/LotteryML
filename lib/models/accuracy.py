@@ -201,7 +201,7 @@ def evaluate_model_accuracy(gamedir, log):
     from lib.config.loader import load_config, evaluate_config
     from lib.data.features import engineer_features
     from lib.data.normalize import normalize_features
-    from lib.models.predictor import prepare_statistics, build_models, _sample_from_proba
+    from lib.models.predictor import prepare_statistics, build_models, _sample_from_proba, _align_input
 
     log.info("Running enhanced regime-aware accuracy evaluation...")
 
@@ -249,12 +249,14 @@ def evaluate_model_accuracy(gamedir, log):
             x_ball = x_row.copy()
             for pb in config["game_balls"][:ball_idx]:
                 x_ball[f"chain_ball{pb}"] = predicted_chain[pb]
+            x_ball = _align_input(models[ball], x_ball)
             pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
             predicted.append(pred)
             predicted_chain[ball] = pred
 
         if config.get("game_has_extra", False):
-            pred, _ = _sample_from_proba(models["extra"], x_row, temperature=1.0)
+            x_extra = _align_input(models["extra"], x_row)
+            pred, _ = _sample_from_proba(models["extra"], x_extra, temperature=1.0)
             predicted.append(pred)
 
         # Baselines

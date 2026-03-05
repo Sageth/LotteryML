@@ -1,5 +1,5 @@
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 # Machine Learning Lottery
@@ -94,6 +94,26 @@ Required fields
 | model_save_path       | Directory for saved models                |
 | no_duplicates         | Whether main balls must be unique         |
 | train_ratio           | Train/test split ratio                    |
+
+## Optional fields
+
+| Field                    | Default        | Description                                                                 |
+|--------------------------|----------------|-----------------------------------------------------------------------------|
+| accuracy_allowance       | 0.0            | Min model accuracy delta vs. baseline to accept a retrained model           |
+| calibration_ratio        | 0.15           | Fraction of training data held out for post-hoc temperature calibration     |
+| entropy_high_threshold   | auto (p66)     | Entropy value above which regime=2 (high); auto-computed if omitted         |
+| entropy_low_threshold    | auto (p33)     | Entropy value below which regime=0 (low); auto-computed if omitted          |
+| entropy_windows          | [10, 25, 50]   | Window sizes for multi-scale Shannon entropy features                       |
+| freq_decay               | 0.97           | Exponential decay factor for recency-weighted frequency features            |
+| include_extra_in_sum     | false          | Whether extra ball contributes to the sum filter                            |
+| input_sample_window      | 10             | Number of recent rows used to build the inference input vector              |
+| lag_window               | 5              | Number of prior draws included as lag features                              |
+| max_prediction_retries   | 20             | Max retries per prediction run before skipping                              |
+| min_confidence           | 0.01           | Minimum per-ball confidence threshold to accept a prediction                |
+| no_duplicates            | true           | Whether to reject predictions containing duplicate ball values              |
+| prediction_smoothing     | 0.3            | Uniform mixture weight α: `p = (1-α)*model + α*uniform` (prevents mode collapse) |
+| regime_temperatures      | {0:0.8,1:1.2,2:1.6} | Sampling temperature per entropy regime (higher = more diverse)      |
+| test_prediction_runs     | 10             | Number of prediction runs generated per date                                |
 
 ---
 

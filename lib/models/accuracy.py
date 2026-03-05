@@ -249,17 +249,12 @@ def evaluate_model_accuracy(gamedir, log):
             for k, ball_k in enumerate(config["game_balls"]):
                 x_row[f"mo_pred_Ball{ball_k}"] = int(mo_preds[k])
 
-        # Model prediction (chained: each prediction feeds into the next)
+        # Model prediction
         predicted = []
-        predicted_chain = {}
-        for ball_idx, ball in enumerate(config["game_balls"]):
-            x_ball = x_row.copy()
-            for pb in config["game_balls"][:ball_idx]:
-                x_ball[f"chain_ball{pb}"] = predicted_chain[pb]
-            x_ball = _align_input(models[ball], x_ball)
+        for ball in config["game_balls"]:
+            x_ball = _align_input(models[ball], x_row)
             pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
             predicted.append(pred)
-            predicted_chain[ball] = pred
 
         if config.get("game_has_extra", False):
             x_extra = _align_input(models["extra"], x_row)
@@ -324,11 +319,8 @@ def evaluate_model_accuracy(gamedir, log):
     tscv = TimeSeriesSplit(n_splits=3)
     x_full = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
 
-    for ball_idx, ball in enumerate(config["game_balls"]):
-        preceding = config["game_balls"][:ball_idx]
+    for ball in config["game_balls"]:
         x_ball = x_full.copy()
-        for pb in preceding:
-            x_ball[f"chain_ball{pb}"] = data[f"Ball{pb}"].values
         y = data[f"Ball{ball}"]
 
         cv_scores = []

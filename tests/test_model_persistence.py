@@ -66,11 +66,17 @@ def test_model_persistence():
 
     # Verify predictions match after reload!
     sum_col = "sum"
-    sample_input = data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col]).head(1)
+    base_input = data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col]).head(1)
 
-    for ball in config["game_balls"]:
+    for ball_idx, ball in enumerate(config["game_balls"]):
         model_before = models_before[ball]
         model_after  = models_after[ball]
+
+        # Build per-ball input with chained columns for preceding balls
+        preceding = config["game_balls"][:ball_idx]
+        sample_input = base_input.copy()
+        for pb in preceding:
+            sample_input[f"chain_ball{pb}"] = 0
 
         # If feature_names_in_ present, validate feature alignment
         if hasattr(model_before, "feature_names_in_"):

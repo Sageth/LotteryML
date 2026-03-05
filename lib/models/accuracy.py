@@ -320,14 +320,16 @@ def evaluate_model_accuracy(gamedir, log):
 
     # === Walk-forward cross-validation ===
     # Uses a lightweight HGBC (not the full ensemble) per fold for speed.
+    # Targets are shifted by 1 to match the training setup: predict draw i+1
+    # from draw i's features (same as build_models and generate_predictions).
     log.info("=== Walk-Forward Cross-Validation (3 folds) ===")
     import lib.models.builder as _builder
     tscv = TimeSeriesSplit(n_splits=3)
-    x_full = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
+    x_full = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"]).iloc[:-1]
 
     for ball in config["game_balls"]:
         x_ball = x_full.copy()
-        y = data[f"Ball{ball}"]
+        y = data[f"Ball{ball}"].shift(-1).iloc[:-1]
 
         cv_scores = []
         for train_idx, val_idx in tscv.split(x_ball):

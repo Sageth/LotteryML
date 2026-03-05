@@ -33,28 +33,39 @@ def _is_diverse(predictions, all_predictions, min_diversity):
     return True
 
 
-def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0):
+def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
+                       recency_weights=None, recency_blend=0.0):
     """
     Sample from classifier probabilities with temperature scaling.
 
-    smoothing: uniform-mixture weight in [0, 1].  Blends the model's
-               distribution with a uniform prior — equivalent to a
-               Dirichlet(smoothing/K) prior on class probabilities.
-               Prevents mode collapse when one class dominates at
-               near-certainty (e.g. p=0.99 for a single value).
-               Applied before temperature so the scale still shapes
-               the resulting blended distribution.
+    smoothing:      uniform-mixture weight — blends model distribution with
+                    a uniform prior to prevent mode collapse.
+    recency_weights: dict {number: weight} of recency-based prior (1/(gap+1)).
+                    When recency_blend > 0, blended in after uniform smoothing.
+    recency_blend:  weight for recency prior.  Final mix is:
+                    (1 - smoothing - recency_blend)*model + smoothing*uniform
+                    + recency_blend*recency
     """
     proba = model.predict_proba(input_vector)[0]
     classes = model.classes_
 
-    # Uniform mixture (Bayesian smoothing)
-    if smoothing > 0.0:
+    model_weight = 1.0 - smoothing - recency_blend
+
+    # Uniform mixture
+    if smoothing > 0.0 or recency_blend > 0.0:
         uniform = np.ones(len(classes)) / len(classes)
-        proba = (1.0 - smoothing) * proba + smoothing * uniform
+        proba = model_weight * proba + smoothing * uniform
+
+    # Recency mixture: map recency weights onto model's class list
+    if recency_blend > 0.0 and recency_weights:
+        rec = np.array([recency_weights.get(int(c), 0.0) for c in classes])
+        rec_sum = rec.sum()
+        if rec_sum > 0:
+            rec /= rec_sum
+            proba = proba + recency_blend * rec
 
     # Temperature scaling
-    scaled = np.power(proba, 1.0 / max(temperature, 1e-6))
+    scaled = np.power(np.clip(proba, 1e-12, None), 1.0 / max(temperature, 1e-6))
     scaled /= scaled.sum()
 
     chosen_idx = np.random.choice(len(classes), p=scaled)
@@ -417,11 +428,23 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     no_duplicates = config.get("no_duplicates", False)
     min_confidence = config.get("min_confidence", 0.01)
     smoothing = config.get("prediction_smoothing", 0.3)
+    recency_blend = config.get("recency_blend", 0.2)
     mean_allowance = config["mean_allowance"]
     mode_allowance = config["mode_allowance"]
     stat_mean = stats["mean"]
     stat_std = stats["std"]
     stat_mode = stats["mode"]
+
+    # Global recency weights: 1/(draws_since_last_seen + 1) across all positions.
+    # Mirrors the winning recency_weighted baseline from accuracy evaluation.
+    ball_cols = [f"Ball{b}" for b in config["game_balls"]]
+    n_rows = len(data)
+    recency_weights = {}
+    for num in range(config["ball_game_range_low"], config["ball_game_range_high"] + 1):
+        mask = (data[ball_cols] == num).any(axis=1)
+        last_idx = mask[::-1].idxmax() if mask.any() else -1
+        gap = (n_rows - 1 - last_idx) if mask.any() else n_rows
+        recency_weights[num] = 1.0 / (gap + 1)
 
     while runs_completed < max_runs:
         retries = 0
@@ -462,7 +485,8 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
                 input_vec  = _align_input(model, input_vector)
 
-                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing)
+                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
+                                               recency_weights, recency_blend)
 
                 # Duplicate check
                 if no_duplicates and pred in used_numbers:
@@ -482,7 +506,8 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 cal_temp = cal_temps.get("extra", regime_temp)
                 temperature = cal_temp * (regime_temp / 1.2)
                 pred, conf = _sample_from_proba(
-                    model, _align_input(model, input_vector), temperature, smoothing
+                    model, _align_input(model, input_vector), temperature, smoothing,
+                    recency_weights, recency_blend
                 )
                 predictions.append(pred)
                 confidences.append(conf)

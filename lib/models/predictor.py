@@ -111,6 +111,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
         test_scores[ball] = test_score
         log.info(f"Ball{ball} test accuracy: {test_score:.4f}")
 
+        # Log top feature importances from HGBC estimator
+        try:
+            hgbc = model.named_estimators_["hgbc"]
+            feat_names = x_train_ball.columns.tolist()
+            top = sorted(zip(feat_names, hgbc.feature_importances_), key=lambda x: -x[1])[:5]
+            log.info(f"Ball{ball} top features: {', '.join(f'{nm}({v:.3f})' for nm, v in top)}")
+        except Exception:
+            pass
+
         models[ball] = model
 
     # --- Extra ball ---

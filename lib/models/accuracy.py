@@ -5,6 +5,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import TimeSeriesSplit
 
 
 # ------------------------------------------------------------
@@ -306,6 +307,28 @@ def evaluate_model_accuracy(gamedir, log):
     for r in [0, 1, 2]:
         rr = regime_results[r]
         log.info(f"Regime {r}: avg_hits={rr['avg_hits']}, distribution={rr['hit_distribution']}")
+
+    # === Walk-forward cross-validation ===
+    # Uses a lightweight HGBC (not the full ensemble) per fold for speed.
+    log.info("=== Walk-Forward Cross-Validation (3 folds) ===")
+    import lib.models.builder as _builder
+    tscv = TimeSeriesSplit(n_splits=3)
+    x_full = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
+
+    for ball_idx, ball in enumerate(config["game_balls"]):
+        preceding = config["game_balls"][:ball_idx]
+        x_ball = x_full.copy()
+        for pb in preceding:
+            x_ball[f"chain_ball{pb}"] = data[f"Ball{pb}"].values
+        y = data[f"Ball{ball}"]
+
+        cv_scores = []
+        for train_idx, val_idx in tscv.split(x_ball):
+            m = _builder.build_cv_model()
+            m.fit(x_ball.iloc[train_idx], y.iloc[train_idx])
+            cv_scores.append(m.score(x_ball.iloc[val_idx], y.iloc[val_idx]))
+
+        log.info(f"Ball{ball} walk-forward CV: mean={np.mean(cv_scores):.4f}, std={np.std(cv_scores):.4f}, folds={cv_scores}")
 
     return {
         "overall": results,

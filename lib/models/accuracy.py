@@ -242,6 +242,13 @@ def evaluate_model_accuracy(gamedir, log):
         # Prepare input vector
         x_row = row.drop(labels=["Date"] + stats["ball_cols"] + ["sum"]).to_frame().T
 
+        # Multi-output stacking: enrich input with global RF predictions
+        if "multi_output" in models:
+            mo_input = _align_input(models["multi_output"], x_row)
+            mo_preds = models["multi_output"].predict(mo_input)[0]
+            for k, ball_k in enumerate(config["game_balls"]):
+                x_row[f"mo_pred_Ball{ball_k}"] = int(mo_preds[k])
+
         # Model prediction (chained: each prediction feeds into the next)
         predicted = []
         predicted_chain = {}

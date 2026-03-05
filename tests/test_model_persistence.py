@@ -68,6 +68,14 @@ def test_model_persistence():
     sum_col = "sum"
     base_input = data.drop(columns=["Date"] + stats["ball_cols"] + [sum_col]).head(1)
 
+    # Replicate the multi-output stacking step (same as production inference)
+    if "multi_output" in models_before:
+        mo_model = models_before["multi_output"]
+        mo_in = _align_input(mo_model, base_input)
+        mo_preds = mo_model.predict(mo_in)[0]
+        for k, ball_k in enumerate(config["game_balls"]):
+            base_input[f"mo_pred_Ball{ball_k}"] = int(mo_preds[k])
+
     for ball_idx, ball in enumerate(config["game_balls"]):
         model_before = models_before[ball]
         model_after  = models_after[ball]

@@ -9,6 +9,8 @@ import random
 from datetime import datetime
 from sklearn.tree import DecisionTreeClassifier as _PruneDT
 from sklearn.model_selection import RandomizedSearchCV
+from sklearn.ensemble import RandomForestClassifier as _MORF
+from sklearn.multioutput import MultiOutputClassifier as _MOC
 import lib.models.builder as builder
 
 
@@ -143,6 +145,26 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             best_params_store = json.load(_f)
     else:
         best_params_store = {}
+
+    # --- Multi-output stacking: train on all balls at once, inject predictions as features ---
+    mo_model_path = os.path.join(gamedir, config["model_save_path"], "MultiOutput.joblib")
+    y_train_all = train_data[[f"Ball{b}" for b in config["game_balls"]]]
+    if os.path.exists(mo_model_path) and not force_retrain:
+        mo_model = joblib.load(mo_model_path)
+        log.info(f"Loaded existing multi-output model: {mo_model_path}")
+    else:
+        mo_model = _MOC(_MORF(n_estimators=50, max_depth=8, random_state=42, n_jobs=-1))
+        mo_model.fit(x_train, y_train_all)
+        joblib.dump(mo_model, mo_model_path)
+        log.info(f"Trained and saved multi-output model: {mo_model_path}")
+
+    mo_train_preds = mo_model.predict(x_train)
+    mo_test_preds = mo_model.predict(x_test)
+    for k, ball_k in enumerate(config["game_balls"]):
+        x_train[f"mo_pred_Ball{ball_k}"] = mo_train_preds[:, k]
+        x_test[f"mo_pred_Ball{ball_k}"] = mo_test_preds[:, k]
+
+    models["multi_output"] = mo_model
 
     # --- Main balls (chained: each model sees preceding balls as features) ---
     for ball_idx, ball in enumerate(config["game_balls"]):
@@ -293,6 +315,13 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             # Use the most recent draw as the input vector
             input_vector = x_data.tail(1).copy()
+
+            # Multi-output stacking: enrich input with global RF predictions
+            if "multi_output" in models:
+                mo_input = _align_input(models["multi_output"], input_vector)
+                mo_preds = models["multi_output"].predict(mo_input)[0]
+                for k, ball_k in enumerate(config["game_balls"]):
+                    input_vector[f"mo_pred_Ball{ball_k}"] = int(mo_preds[k])
 
             # Determine regime for this input
             regime = int(input_vector["regime"].iloc[0])

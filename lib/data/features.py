@@ -165,4 +165,15 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             scores += cooc_matrix[col_vals, ball_arr[:, k].astype(int)]
         data[f"{col}_cooccurrence"] = scores
 
+    # === 12. Date/schedule features (cyclical encoding) ===
+    # Sine/cosine encoding preserves cyclical adjacency (e.g. Sun/Mon are neighbors).
+    dates = pd.to_datetime(data["Date"])
+    dow = dates.dt.dayofweek.values        # 0=Mon … 6=Sun
+    month = dates.dt.month.values          # 1–12
+
+    data["day_of_week_sin"] = np.sin(2 * np.pi * dow / 7)
+    data["day_of_week_cos"] = np.cos(2 * np.pi * dow / 7)
+    data["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12)
+    data["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12)
+
     return data

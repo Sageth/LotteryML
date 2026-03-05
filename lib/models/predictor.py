@@ -168,7 +168,6 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     game_has_extra = config.get("game_has_extra", False)
     include_extra_in_sum = config.get("include_extra_in_sum", False)
     no_duplicates = config.get("no_duplicates", False)
-    input_sample_window = config.get("input_sample_window", 10)
     min_confidence = config.get("min_confidence", 0.01)
     mean_allowance = config["mean_allowance"]
     mode_allowance = config["mode_allowance"]
@@ -186,10 +185,8 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
             confidences = []
             used_numbers = set()
 
-            # Sample input vector from recent draws
-            input_vector = x_data.tail(input_sample_window).sample(
-                n=1, random_state=random.randint(0, 10000)
-            ).copy()
+            # Use the most recent draw as the input vector
+            input_vector = x_data.tail(1).copy()
 
             # Determine regime for this input
             regime = int(input_vector["regime"].iloc[0])

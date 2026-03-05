@@ -206,6 +206,11 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     # long-term drift (e.g. rule changes that shift number distributions).
     data["draw_index"] = np.arange(n) / max(n - 1, 1)
 
+    # Defragment before adding sections 17-19 to silence PerformanceWarning.
+    # By this point the DataFrame has many columns from prior sections and
+    # pandas stores them in separate internal blocks; copying consolidates them.
+    data = data.copy()
+
     # === 17. Decaying frequency (global + positional) ===
     # Exponential weights: most recent draw = 1.0, each prior row discounted
     # by freq_decay. Captures structural recency bias without a hard window.
@@ -215,13 +220,15 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     decayed_global = np.zeros(range_high + 1)
     for k in range(n_balls):
         np.add.at(decayed_global, ball_arr[:, k].astype(int), decay_weights)
+
+    new_cols: dict = {}
     for col in ball_cols_main:
-        data[f"{col}_decayed_freq"] = decayed_global[data[col].values.astype(int)]
+        new_cols[f"{col}_decayed_freq"] = decayed_global[data[col].values.astype(int)]
 
     for idx, col in enumerate(ball_cols_main):
         decayed_pos = np.zeros(range_high + 1)
         np.add.at(decayed_pos, ball_arr[:, idx].astype(int), decay_weights)
-        data[f"{col}_decayed_pos_freq"] = decayed_pos[data[col].values.astype(int)]
+        new_cols[f"{col}_decayed_pos_freq"] = decayed_pos[data[col].values.astype(int)]
 
     # === 18. Hot/cold momentum ===
     # Ratio of actual recent count (window=20) to statistically expected count,
@@ -229,8 +236,8 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     range_width = config["ball_game_range_high"] - config["ball_game_range_low"] + 1
     expected_in_window = (20 * n_balls) / range_width
     for col in ball_cols_main:
-        data[f"{col}_momentum"] = (
-            data[f"{col}_recent_count_20"] / max(expected_in_window, 1e-6) - 1.0
+        new_cols[f"{col}_momentum"] = (
+            data[f"{col}_recent_count_20"].values / max(expected_in_window, 1e-6) - 1.0
         )
 
     # === 19. Decaying co-occurrence ===
@@ -251,6 +258,9 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         scores = np.zeros(n)
         for k in other_indices:
             scores += cooc_decayed[col_vals, ball_arr[:, k].astype(int)]
-        data[f"{col}_decayed_cooccurrence"] = scores
+        new_cols[f"{col}_decayed_cooccurrence"] = scores
+
+    # Batch-assign all new columns in one concat to avoid repeated fragmentation
+    data = pd.concat([data, pd.DataFrame(new_cols, index=data.index)], axis=1)
 
     return data

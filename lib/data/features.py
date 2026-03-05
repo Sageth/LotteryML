@@ -176,4 +176,34 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     data["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12)
     data["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12)
 
+    # === 13. Positional frequency ===
+    # How often each value appears specifically in this ball position
+    # (distinct from global_freq which pools across all positions).
+    for col in ball_cols_main:
+        pos_freq = data[col].value_counts().to_dict()
+        data[f"{col}_pos_freq"] = data[col].map(pos_freq).fillna(0).astype(int)
+
+    # === 14. Draw spread features ===
+    # Range and average gap between consecutive sorted balls capture
+    # whether a draw is tightly clustered or widely spread.
+    sorted_arr = np.sort(ball_arr, axis=1)
+    data["draw_range"] = sorted_arr[:, -1] - sorted_arr[:, 0]
+    if ball_arr.shape[1] > 1:
+        data["draw_mean_gap"] = np.diff(sorted_arr, axis=1).mean(axis=1)
+    else:
+        data["draw_mean_gap"] = 0.0
+
+    # === 15. Zone counts (low / mid / high third of the range) ===
+    range_span = config["ball_game_range_high"] - config["ball_game_range_low"] + 1
+    z1 = config["ball_game_range_low"] + range_span / 3
+    z2 = config["ball_game_range_low"] + 2 * range_span / 3
+    data["zone_low_count"]  = (ball_arr < z1).sum(axis=1)
+    data["zone_mid_count"]  = ((ball_arr >= z1) & (ball_arr < z2)).sum(axis=1)
+    data["zone_high_count"] = (ball_arr >= z2).sum(axis=1)
+
+    # === 16. Draw sequence number ===
+    # Normalized 0→1 index over full history; lets the model detect
+    # long-term drift (e.g. rule changes that shift number distributions).
+    data["draw_index"] = np.arange(n) / max(n - 1, 1)
+
     return data

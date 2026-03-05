@@ -206,7 +206,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             log.info(f"Loaded existing model: {model_path}")
         else:
             hgbc_params = best_params_store.get(ball_key)
-            model = builder.build_model(hgbc_params=hgbc_params)
+            # CalibratedClassifierCV(cv=k) needs ≥k samples per class.
+            # Rare ball positions (e.g. Ball1=44 in a sorted draw) can have
+            # some values appearing only once; degrade gracefully to cv=2 or
+            # no calibration rather than crashing.
+            min_class_count = int(y_train.value_counts().min())
+            calibration_cv = min(2, min_class_count) if min_class_count >= 2 else None
+            if calibration_cv is None:
+                log.warning(f"Ball{ball}: some classes have only 1 sample; skipping RF calibration")
+            model = builder.build_model(hgbc_params=hgbc_params, calibration_cv=calibration_cv)
             model.fit(x_train_ball, y_train)
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
@@ -246,7 +254,11 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             log.info(f"Loaded existing model: {model_path}")
         else:
             hgbc_params = best_params_store.get("extra")
-            model = builder.build_model(hgbc_params=hgbc_params)
+            min_class_count = int(y_train.value_counts().min())
+            calibration_cv = min(2, min_class_count) if min_class_count >= 2 else None
+            if calibration_cv is None:
+                log.warning(f"{extra_col}: some classes have only 1 sample; skipping RF calibration")
+            model = builder.build_model(hgbc_params=hgbc_params, calibration_cv=calibration_cv)
             model.fit(x_train, y_train)
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")

@@ -79,4 +79,15 @@ Tests live in `tests/` with shared fixtures in `tests/conftest.py`. The `test_co
 
 ### Changes
 All changes must occur via a pull request. Never commit directly to main.
-Before pushing a pull request, you must pass unit tests via `pytest`
+Before pushing a pull request, you must pass **both** checks:
+
+1. Unit tests:
+```shell
+pipenv run pytest
+```
+
+2. End-to-end pipeline test against real data (catches issues unit tests miss, such as rare-class edge cases, model training failures, and data-shape mismatches):
+```shell
+python lottery.py NJ_Pick6 --dry-run --force-retrain
+```
+This must complete without errors. `--dry-run` skips writing prediction files; `--force-retrain` forces a full fresh training run so the pipeline is exercised end-to-end.

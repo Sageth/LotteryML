@@ -8,7 +8,7 @@ from sklearn.ensemble import (
 )
 
 
-def build_model(hgbc_params=None):
+def build_model(hgbc_params=None, calibration_cv=2):
     """
     Soft-voting ensemble of a calibrated RandomForest and a
     HistGradientBoostingClassifier. Averaging two complementary
@@ -18,25 +18,30 @@ def build_model(hgbc_params=None):
     RF: regularized to prevent overfitting; wrapped in
         CalibratedClassifierCV to fix RF's known probability
         miscalibration (critical for temperature-scaled sampling).
+        calibration_cv controls the fold count; pass None to skip
+        calibration entirely (used when some classes have only 1 sample).
     HGBC: gradient-boosted trees; naturally better calibrated than RF,
           handles missing values natively, fast on small datasets.
 
     hgbc_params: optional dict of HGBC hyperparameters to override defaults
                  (e.g. from a prior RandomizedSearchCV tuning run).
+    calibration_cv: number of CV folds for CalibratedClassifierCV, or None
+                    to use an uncalibrated RF (fallback for rare classes).
     """
-    rf = CalibratedClassifierCV(
-        RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
-            min_samples_split=5,
-            min_samples_leaf=5,
-            max_features="sqrt",
-            random_state=42,
-            n_jobs=-1,
-        ),
-        cv=2,
-        method="sigmoid",
+    rf_base = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=10,
+        min_samples_split=5,
+        min_samples_leaf=5,
+        max_features="sqrt",
+        random_state=42,
+        n_jobs=-1,
     )
+    if calibration_cv is not None:
+        rf = CalibratedClassifierCV(rf_base, cv=calibration_cv, method="sigmoid")
+    else:
+        rf = rf_base
+
     base_hgbc_kwargs = dict(
         max_iter=200,
         max_depth=6,

@@ -86,21 +86,7 @@ class GitHubAutoMerge:
             print("Initialization failed. Cannot proceed.")
             return
 
-        # Ensure we start from a clean, up-to-date main branch.
-        # Stash any staged/untracked changes first so pull doesn't fail.
-        print(f"Checking out '{self.main_branch}' and pulling latest changes...")
-        try:
-            stash_result = self.repo.git.stash('push', '--include-untracked', '-m', 'automerge-temp')
-            had_stash = 'No local changes to save' not in stash_result
-            self.repo.git.checkout(self.main_branch)
-            self.repo.git.pull(self.remote_name, self.main_branch)
-            if had_stash:
-                self.repo.git.stash('pop')
-        except Exception as e:
-            print(f"Failed to sync with '{self.main_branch}': {e}")
-            return
-
-        # Stage all new, modified, and deleted files using `git add -A`
+        # Stage everything first, then check if there's anything to do
         print("Staging all modified and untracked files...")
         try:
             self.repo.git.add(A=True)
@@ -108,9 +94,16 @@ class GitHubAutoMerge:
             print(f"Error staging files: {e}")
             return
 
-        # Correctly check for staged changes by comparing the index to the HEAD commit
         if not self.repo.index.diff("HEAD"):
             print("No staged changes to commit. Aborting automerge workflow.")
+            return
+
+        # Fetch latest remote state so the new branch is up to date
+        print(f"Fetching latest '{self.main_branch}'...")
+        try:
+            self.repo.git.fetch(self.remote_name, self.main_branch)
+        except Exception as e:
+            print(f"Failed to fetch '{self.main_branch}': {e}")
             return
 
         # Define branch names and commit message
@@ -120,8 +113,9 @@ class GitHubAutoMerge:
         pr_body = f"This PR contains automated updates."
 
         try:
-            # Create and checkout new branch from main
-            new_branch = self.repo.create_head(new_branch_name)
+            # Create and checkout new branch from latest remote main
+            remote_main = self.repo.remotes[self.remote_name].refs[self.main_branch]
+            new_branch = self.repo.create_head(new_branch_name, commit=remote_main.commit)
             new_branch.checkout()
 
             # Commit with signing

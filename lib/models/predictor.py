@@ -62,6 +62,49 @@ def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0):
 
 
 # ------------------------------------------------------------
+#  Temperature-scaling calibration
+# ------------------------------------------------------------
+def _calibrate_temperature(model, x_cal, y_cal):
+    """
+    Find the temperature T in [1.0, 8.0] that minimises negative log-likelihood
+    on the held-out calibration set — the standard 'temperature scaling' form
+    of Platt calibration.  T > 1 means the model was overconfident (flatten
+    the distribution).  We only search T >= 1.0 because sharpening (T < 1)
+    would undo smoothing and force near-deterministic predictions that fail
+    the statistical diversity filters.
+
+    Returns the optimal temperature as a float (defaults to 1.0 if calibration
+    data is too small or labels don't overlap with training classes).
+    """
+    if len(x_cal) < 5 or not hasattr(model, "predict_proba"):
+        return 1.0
+
+    probas = model.predict_proba(x_cal)         # (n_cal, n_classes)
+    classes = list(model.classes_)
+    class_to_idx = {c: i for i, c in enumerate(classes)}
+
+    # valid_mask is boolean over calibration rows; use positional indexing
+    # because probas is a numpy array (not a DataFrame).
+    valid_mask = y_cal.map(class_to_idx).notna().values
+    true_idx   = y_cal.map(class_to_idx)[valid_mask].astype(int).values
+    if len(true_idx) == 0:
+        return 1.0
+
+    probas = probas[valid_mask]                 # select valid rows positionally
+
+    best_temp, best_nll = 1.0, float("inf")
+    for temp in np.linspace(1.0, 8.0, 71):     # ~0.1-step grid, T >= 1.0 only
+        scaled = np.power(probas + 1e-12, 1.0 / temp)
+        scaled /= scaled.sum(axis=1, keepdims=True)
+        nll = -np.log(scaled[np.arange(len(true_idx)), true_idx] + 1e-12).mean()
+        if nll < best_nll:
+            best_nll = nll
+            best_temp = temp
+
+    return float(best_temp)
+
+
+# ------------------------------------------------------------
 #  Hyperparameter tuning helper
 # ------------------------------------------------------------
 _HGBC_SEARCH_SPACE = {
@@ -180,34 +223,54 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     models["multi_output"] = mo_model
 
+    # Temperature-scaling calibration: most recent cal_ratio of training data
+    # is held out to calibrate each model's temperature post-hoc.  Must be
+    # chronologically AFTER the fit data to prevent any leakage.
+    cal_ratio = config.get("calibration_ratio", 0.15)
+
+    # Load or initialise per-ball calibrated temperatures
+    cal_temps_path = os.path.join(gamedir, config["model_save_path"], "calibrated_temps.json")
+    if os.path.exists(cal_temps_path):
+        with open(cal_temps_path) as _f:
+            cal_temps_store = json.load(_f)
+    else:
+        cal_temps_store = {}
+
     # --- Main balls ---
     for ball in config["game_balls"]:
         y_train = train_data[f"Ball{ball}"]
-        y_test = test_data[f"Ball{ball}"]
+        y_test  = test_data[f"Ball{ball}"]
 
         x_train_ball = x_train.copy()
-        x_test_ball = x_test.copy()
+        x_test_ball  = x_test.copy()
 
-        # Feature pruning: lightweight DecisionTree identifies low-importance
-        # features to drop before training the full ensemble.
+        # Chronological calibration split: most recent cal_ratio of training
+        # data is held out for temperature calibration.
+        cal_idx    = int(len(x_train_ball) * (1 - cal_ratio))
+        x_fit_ball = x_train_ball.iloc[:cal_idx].copy()
+        x_cal_ball = x_train_ball.iloc[cal_idx:].copy()
+        y_fit      = y_train.iloc[:cal_idx]
+        y_cal      = y_train.iloc[cal_idx:]
+
+        # Feature pruning on the fit portion only.
         pruning_threshold = config.get("feature_pruning_threshold", 1e-4)
         if pruning_threshold > 0:
             prune_m = _PruneDT(max_depth=8, random_state=42)
-            prune_m.fit(x_train_ball, y_train)
+            prune_m.fit(x_fit_ball, y_fit)
             mask = prune_m.feature_importances_ >= pruning_threshold
             if mask.sum() >= 5:
-                keep = x_train_ball.columns[mask].tolist()
-                x_train_ball = x_train_ball[keep]
+                keep = x_fit_ball.columns[mask].tolist()
+                x_fit_ball  = x_fit_ball[keep]
+                x_cal_ball  = x_cal_ball[keep]
                 x_test_ball = x_test_ball[keep]
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
-        # Optional hyperparameter tuning: search for best HGBC params, then cache.
         ball_key = f"Ball{ball}"
         if tune:
             log.info(f"Tuning HGBC hyperparameters for Ball{ball}...")
-            best_params_store[ball_key] = _tune_hgbc(x_train_ball, y_train, log)
+            best_params_store[ball_key] = _tune_hgbc(x_fit_ball, y_fit, log)
             with open(params_path, "w") as _f:
                 json.dump(best_params_store, _f, indent=2)
 
@@ -215,28 +278,29 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")
         else:
-            hgbc_params = best_params_store.get(ball_key)
-            # CalibratedClassifierCV(cv=k) needs ≥k samples per class.
-            # Rare ball positions (e.g. Ball1=44 in a sorted draw) can have
-            # some values appearing only once; degrade gracefully to cv=2 or
-            # no calibration rather than crashing.
-            min_class_count = int(y_train.value_counts().min())
-            calibration_cv = min(2, min_class_count) if min_class_count >= 2 else None
+            min_class_count = int(y_fit.value_counts().min())
+            calibration_cv  = min(2, min_class_count) if min_class_count >= 2 else None
             if calibration_cv is None:
-                log.warning(f"Ball{ball}: some classes have only 1 sample; skipping RF calibration")
-            model = builder.build_model(hgbc_params=hgbc_params, calibration_cv=calibration_cv)
-            model.fit(x_train_ball, y_train)
+                log.warning(f"Ball{ball}: some classes have only 1 fit sample; skipping RF calibration")
+            model = builder.build_model(hgbc_params=best_params_store.get(ball_key),
+                                        calibration_cv=calibration_cv)
+            model.fit(x_fit_ball, y_fit)
+
+            # Temperature-scaling calibration on held-out data
+            opt_temp = _calibrate_temperature(model, _align_input(model, x_cal_ball), y_cal)
+            cal_temps_store[ball_key] = opt_temp
+            log.info(f"Ball{ball}: calibrated temperature = {opt_temp:.3f}")
+
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        test_score = model.score(x_test_ball, y_test)
+        test_score = model.score(_align_input(model, x_test_ball), y_test)
         test_scores[ball] = test_score
         log.info(f"Ball{ball} test accuracy: {test_score:.4f}")
 
-        # Log top feature importances from HGBC estimator
         try:
             hgbc = model.named_estimators_["hgbc"]
-            feat_names = x_train_ball.columns.tolist()
+            feat_names = x_fit_ball.columns.tolist()
             top = sorted(zip(feat_names, hgbc.feature_importances_), key=lambda x: -x[1])[:5]
             log.info(f"Ball{ball} top features: {', '.join(f'{nm}({v:.3f})' for nm, v in top)}")
         except Exception:
@@ -244,18 +308,29 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
         models[ball] = model
 
+    # Persist calibrated temperatures alongside model files
+    with open(cal_temps_path, "w") as _f:
+        json.dump(cal_temps_store, _f, indent=2)
+    models["calibrated_temps"] = cal_temps_store
+
     # --- Extra ball ---
     if config.get("game_has_extra", False):
         extra_col = config["game_extra_col"]
-        y_train = train_data[extra_col]
-        y_test = test_data[extra_col]
+        y_train   = train_data[extra_col]
+        y_test    = test_data[extra_col]
+
+        cal_idx  = int(len(x_train) * (1 - cal_ratio))
+        x_fit_ex = x_train.iloc[:cal_idx].copy()
+        x_cal_ex = x_train.iloc[cal_idx:].copy()
+        y_fit_ex = y_train.iloc[:cal_idx]
+        y_cal_ex = y_train.iloc[cal_idx:]
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"{extra_col}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
         if tune:
             log.info(f"Tuning HGBC hyperparameters for {extra_col}...")
-            best_params_store["extra"] = _tune_hgbc(x_train, y_train, log)
+            best_params_store["extra"] = _tune_hgbc(x_fit_ex, y_fit_ex, log)
             with open(params_path, "w") as _f:
                 json.dump(best_params_store, _f, indent=2)
 
@@ -263,17 +338,25 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")
         else:
-            hgbc_params = best_params_store.get("extra")
-            min_class_count = int(y_train.value_counts().min())
-            calibration_cv = min(2, min_class_count) if min_class_count >= 2 else None
+            min_class_count = int(y_fit_ex.value_counts().min())
+            calibration_cv  = min(2, min_class_count) if min_class_count >= 2 else None
             if calibration_cv is None:
-                log.warning(f"{extra_col}: some classes have only 1 sample; skipping RF calibration")
-            model = builder.build_model(hgbc_params=hgbc_params, calibration_cv=calibration_cv)
-            model.fit(x_train, y_train)
+                log.warning(f"{extra_col}: some classes have only 1 fit sample; skipping RF calibration")
+            model = builder.build_model(hgbc_params=best_params_store.get("extra"),
+                                        calibration_cv=calibration_cv)
+            model.fit(x_fit_ex, y_fit_ex)
+
+            opt_temp = _calibrate_temperature(model, _align_input(model, x_cal_ex), y_cal_ex)
+            cal_temps_store["extra"] = opt_temp
+            log.info(f"{extra_col}: calibrated temperature = {opt_temp:.3f}")
+            with open(cal_temps_path, "w") as _f:
+                json.dump(cal_temps_store, _f, indent=2)
+            models["calibrated_temps"] = cal_temps_store
+
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        test_score = model.score(x_test, y_test)
+        test_score = model.score(_align_input(model, x_test), y_test)
         test_scores["extra"] = test_score
         log.info(f"{extra_col} test accuracy: {test_score:.4f}")
 
@@ -348,14 +431,22 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             # Determine regime for this input
             regime = int(input_vector["regime"].iloc[0])
-            temperature = _temperature_for_regime(regime, config)
+            regime_temp = _temperature_for_regime(regime, config)
+
+            # Calibrated temperatures from training (if available) become the
+            # base; regime acts as a proportional multiplier around neutral (1.2).
+            cal_temps = models.get("calibrated_temps", {})
 
             valid = True
 
             # Predict main balls
             for ball in config["game_balls"]:
-                model = models[ball]
-                input_vec = _align_input(model, input_vector)
+                model  = models[ball]
+                # Blend calibrated temperature with regime signal:
+                # cal_temp is the statistically correct base; regime scales it.
+                cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
+                temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
+                input_vec  = _align_input(model, input_vector)
 
                 pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing)
 
@@ -373,7 +464,9 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             # Extra ball
             if game_has_extra:
-                model = models["extra"]
+                model    = models["extra"]
+                cal_temp = cal_temps.get("extra", regime_temp)
+                temperature = cal_temp * (regime_temp / 1.2)
                 pred, conf = _sample_from_proba(
                     model, _align_input(model, input_vector), temperature, smoothing
                 )

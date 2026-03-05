@@ -11,7 +11,7 @@ from lib.data.features import engineer_features
 from lib.data.github import GitHubAutoMerge
 from lib.data.io import load_data
 from lib.data.normalize import normalize_features
-from lib.models.accuracy import report_live_accuracy_all
+from lib.models.accuracy import report_live_accuracy_all, evaluate_model_accuracy
 from lib.models.predictor import (should_skip_predictions, prepare_statistics, build_models, generate_predictions,
                                   export_predictions, )
 
@@ -48,9 +48,15 @@ def run_lottery(gamedir, args):
     config = evaluate_config(load_config(gamedir))
 
     # Accuracy-only mode
-    if args.accuracy or args.accuracy_regimes:
-        log.info("Running accuracy evaluation...")
-        results = report_live_accuracy_all(gamedir, log)
+    if args.accuracy:
+        log.info("Running live accuracy evaluation...")
+        report_live_accuracy_all(gamedir, log)
+        log.info("Accuracy evaluation complete.")
+        return
+
+    if args.accuracy_regimes:
+        log.info("Running ML model accuracy evaluation vs. baselines...")
+        evaluate_model_accuracy(gamedir, log)
         log.info("Accuracy evaluation complete.")
         return
 

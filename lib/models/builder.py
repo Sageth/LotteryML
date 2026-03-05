@@ -34,7 +34,7 @@ def build_model(hgbc_params=None):
             random_state=42,
             n_jobs=-1,
         ),
-        cv=3,
+        cv=2,
         method="sigmoid",
     )
     base_hgbc_kwargs = dict(

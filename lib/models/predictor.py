@@ -7,12 +7,29 @@ import numpy as np
 import pandas as pd
 import random
 from datetime import datetime
+from sklearn.tree import DecisionTreeClassifier as _PruneDT
 import lib.models.builder as builder
 
 
 # ------------------------------------------------------------
 #  Utility: Probability-based sampling with temperature
 # ------------------------------------------------------------
+def _align_input(model, input_vec):
+    """Return input_vec filtered/ordered to match the model's training features."""
+    if hasattr(model, "feature_names_in_"):
+        return input_vec.reindex(columns=model.feature_names_in_, fill_value=0)
+    return input_vec
+
+
+def _is_diverse(predictions, all_predictions, min_diversity):
+    """True if predictions differ by at least min_diversity balls from every prior run."""
+    for prior in all_predictions:
+        overlap = len(set(predictions) & set(prior["predicted"]))
+        if len(predictions) - overlap < min_diversity:
+            return False
+    return True
+
+
 def _sample_from_proba(model, input_vector, temperature=1.0):
     """
     Sample from classifier probabilities with temperature scaling.
@@ -94,6 +111,18 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
         for pb in preceding:
             x_train_ball[f"chain_ball{pb}"] = train_data[f"Ball{pb}"].values
             x_test_ball[f"chain_ball{pb}"] = test_data[f"Ball{pb}"].values
+
+        # Feature pruning: lightweight DecisionTree identifies low-importance
+        # features to drop before training the full ensemble.
+        pruning_threshold = config.get("feature_pruning_threshold", 1e-4)
+        if pruning_threshold > 0:
+            prune_m = _PruneDT(max_depth=8, random_state=42)
+            prune_m.fit(x_train_ball, y_train)
+            mask = prune_m.feature_importances_ >= pruning_threshold
+            if mask.sum() >= 5:
+                keep = x_train_ball.columns[mask].tolist()
+                x_train_ball = x_train_ball[keep]
+                x_test_ball = x_test_ball[keep]
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -182,6 +211,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     # Hoist loop-invariant config/stats lookups
     num_main = len(config["game_balls"])
     game_has_extra = config.get("game_has_extra", False)
+    min_diversity = config.get("min_prediction_diversity", 2)
     include_extra_in_sum = config.get("include_extra_in_sum", False)
     no_duplicates = config.get("no_duplicates", False)
     min_confidence = config.get("min_confidence", 0.01)
@@ -218,6 +248,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 input_vec = input_vector.copy()
                 for pb in config["game_balls"][:ball_idx]:
                     input_vec[f"chain_ball{pb}"] = predicted_chain[pb]
+                input_vec = _align_input(model, input_vec)
 
                 pred, conf = _sample_from_proba(model, input_vec, temperature)
 
@@ -237,7 +268,9 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
             # Extra ball
             if game_has_extra:
                 model = models["extra"]
-                pred, conf = _sample_from_proba(model, input_vector, temperature)
+                pred, conf = _sample_from_proba(
+                    model, _align_input(model, input_vector), temperature
+                )
                 predictions.append(pred)
                 confidences.append(conf)
 
@@ -256,6 +289,9 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 confidence_pass = all(c >= min_confidence for c in confidences)
 
                 passed = mean_pass and mode_pass and stddev_pass and confidence_pass
+
+            if passed and not _is_diverse(predictions, all_predictions, min_diversity):
+                continue
 
             if passed:
                 all_predictions.append({

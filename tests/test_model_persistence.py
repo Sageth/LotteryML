@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 import lib.models.builder as builder
-from lib.models.predictor import prepare_statistics, build_models
+from lib.models.predictor import prepare_statistics, build_models, _align_input
 from lib.data.features import engineer_features
 from lib.data.normalize import normalize_features
 from lib.config.loader import load_config, evaluate_config
@@ -79,14 +79,19 @@ def test_model_persistence():
             sample_input[f"chain_ball{pb}"] = 0
 
         # If feature_names_in_ present, validate feature alignment
+        # After pruning, model may use a subset of sample_input columns.
         if hasattr(model_before, "feature_names_in_"):
-            assert list(model_before.feature_names_in_) == list(sample_input.columns), f"Feature mismatch in model_before for Ball{ball}!"
+            assert set(model_before.feature_names_in_).issubset(set(sample_input.columns)), \
+                f"Model feature_names_in_ not a subset of sample_input for Ball{ball}!"
         if hasattr(model_after, "feature_names_in_"):
-            assert list(model_after.feature_names_in_) == list(sample_input.columns), f"Feature mismatch in model_after for Ball{ball}!"
+            assert set(model_after.feature_names_in_).issubset(set(sample_input.columns)), \
+                f"Model feature_names_in_ not a subset of sample_input for Ball{ball}!"
 
-        # Predict
-        pred_before = model_before.predict(sample_input)[0]
-        pred_after  = model_after.predict(sample_input)[0]
+        # Predict (align input to model's expected features after pruning)
+        aligned_before = _align_input(model_before, sample_input)
+        aligned_after  = _align_input(model_after,  sample_input)
+        pred_before = model_before.predict(aligned_before)[0]
+        pred_after  = model_after.predict(aligned_after)[0]
 
         diff = abs(pred_before - pred_after)
         print(f"Ball{ball}: before={pred_before:.4f}, after={pred_after:.4f}, diff={diff:.6f}")

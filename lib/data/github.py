@@ -86,11 +86,16 @@ class GitHubAutoMerge:
             print("Initialization failed. Cannot proceed.")
             return
 
-        # Ensure we start from a clean, up-to-date main branch
+        # Ensure we start from a clean, up-to-date main branch.
+        # Stash any staged/untracked changes first so pull doesn't fail.
         print(f"Checking out '{self.main_branch}' and pulling latest changes...")
         try:
+            stash_result = self.repo.git.stash('push', '--include-untracked', '-m', 'automerge-temp')
+            had_stash = 'No local changes to save' not in stash_result
             self.repo.git.checkout(self.main_branch)
             self.repo.git.pull(self.remote_name, self.main_branch)
+            if had_stash:
+                self.repo.git.stash('pop')
         except Exception as e:
             print(f"Failed to sync with '{self.main_branch}': {e}")
             return

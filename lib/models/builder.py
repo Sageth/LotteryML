@@ -1,30 +1,61 @@
 # lib/models/builder.py
 
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import (
+    HistGradientBoostingClassifier,
+    RandomForestClassifier,
+    VotingClassifier,
+)
 
 
 def build_model():
     """
-    Build a classifier for predicting lottery balls.
-    Classification is more appropriate than regression because
-    lottery balls are discrete categorical outcomes.
+    Soft-voting ensemble of a calibrated RandomForest and a
+    HistGradientBoostingClassifier. Averaging two complementary
+    model families reduces variance and consistently outperforms
+    either alone on small tabular datasets.
 
-    Regularization (max_depth, min_samples_leaf, max_features) prevents
-    overfitting on small lottery datasets. CalibratedClassifierCV corrects
-    RandomForest's known probability miscalibration, which is critical for
-    temperature-scaled sampling to work meaningfully.
+    RF: regularized to prevent overfitting; wrapped in
+        CalibratedClassifierCV to fix RF's known probability
+        miscalibration (critical for temperature-scaled sampling).
+    HGBC: gradient-boosted trees; naturally better calibrated than RF,
+          handles missing values natively, fast on small datasets.
     """
-    rf = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=10,
-        min_samples_split=5,
-        min_samples_leaf=5,
-        max_features="sqrt",
-        random_state=42,
-        n_jobs=-1,
+    rf = CalibratedClassifierCV(
+        RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            min_samples_split=5,
+            min_samples_leaf=5,
+            max_features="sqrt",
+            random_state=42,
+            n_jobs=-1,
+        ),
+        cv=3,
+        method="sigmoid",
     )
-    return CalibratedClassifierCV(rf, cv=3, method="sigmoid")
+    hgbc = HistGradientBoostingClassifier(
+        max_iter=200,
+        max_depth=6,
+        min_samples_leaf=20,
+        learning_rate=0.05,
+        random_state=42,
+    )
+    return VotingClassifier([("rf", rf), ("hgbc", hgbc)], voting="soft")
+
+
+def build_cv_model():
+    """
+    Lightweight HGBC for walk-forward cross-validation scoring.
+    Avoids the cost of training the full ensemble per CV fold.
+    """
+    return HistGradientBoostingClassifier(
+        max_iter=100,
+        max_depth=6,
+        min_samples_leaf=20,
+        learning_rate=0.05,
+        random_state=42,
+    )
 
 
 def build_model_classifier():

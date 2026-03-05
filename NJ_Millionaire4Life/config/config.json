@@ -10,7 +10,7 @@
   ],
   "game_has_extra": true,
   "game_extra_name": "MillionaireBall",
-  "game_extra_col": "BallMillionaire",
+  "game_extra_col": "BallExtra",
   "game_balls_extra_low": 1,
   "game_balls_extra_high": 5,
   "model_save_path": "models",

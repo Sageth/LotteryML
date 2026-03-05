@@ -166,17 +166,13 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     models["multi_output"] = mo_model
 
-    # --- Main balls (chained: each model sees preceding balls as features) ---
-    for ball_idx, ball in enumerate(config["game_balls"]):
-        preceding = config["game_balls"][:ball_idx]
+    # --- Main balls ---
+    for ball in config["game_balls"]:
         y_train = train_data[f"Ball{ball}"]
         y_test = test_data[f"Ball{ball}"]
 
         x_train_ball = x_train.copy()
         x_test_ball = x_test.copy()
-        for pb in preceding:
-            x_train_ball[f"chain_ball{pb}"] = train_data[f"Ball{pb}"].values
-            x_test_ball[f"chain_ball{pb}"] = test_data[f"Ball{pb}"].values
 
         # Feature pruning: lightweight DecisionTree identifies low-importance
         # features to drop before training the full ensemble.
@@ -341,15 +337,10 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             valid = True
 
-            # Predict main balls (chained: each prediction feeds into the next)
-            predicted_chain = {}
-            for ball_idx, ball in enumerate(config["game_balls"]):
+            # Predict main balls
+            for ball in config["game_balls"]:
                 model = models[ball]
-
-                input_vec = input_vector.copy()
-                for pb in config["game_balls"][:ball_idx]:
-                    input_vec[f"chain_ball{pb}"] = predicted_chain[pb]
-                input_vec = _align_input(model, input_vec)
+                input_vec = _align_input(model, input_vector)
 
                 pred, conf = _sample_from_proba(model, input_vec, temperature)
 
@@ -359,7 +350,6 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                     break
 
                 used_numbers.add(pred)
-                predicted_chain[ball] = pred
                 predictions.append(pred)
                 confidences.append(conf)
 

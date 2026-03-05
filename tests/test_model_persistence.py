@@ -76,15 +76,11 @@ def test_model_persistence():
         for k, ball_k in enumerate(config["game_balls"]):
             base_input[f"mo_pred_Ball{ball_k}"] = int(mo_preds[k])
 
-    for ball_idx, ball in enumerate(config["game_balls"]):
+    for ball in config["game_balls"]:
         model_before = models_before[ball]
         model_after  = models_after[ball]
 
-        # Build per-ball input with chained columns for preceding balls
-        preceding = config["game_balls"][:ball_idx]
         sample_input = base_input.copy()
-        for pb in preceding:
-            sample_input[f"chain_ball{pb}"] = 0
 
         # If feature_names_in_ present, validate feature alignment
         # After pruning, model may use a subset of sample_input columns.

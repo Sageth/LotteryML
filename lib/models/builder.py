@@ -30,9 +30,9 @@ def build_model(hgbc_params=None, calibration_cv=2):
     """
     rf_base = RandomForestClassifier(
         n_estimators=100,
-        max_depth=10,
-        min_samples_split=5,
-        min_samples_leaf=5,
+        max_depth=6,
+        min_samples_split=20,
+        min_samples_leaf=20,
         max_features="sqrt",
         random_state=42,
         n_jobs=-1,
@@ -44,8 +44,8 @@ def build_model(hgbc_params=None, calibration_cv=2):
 
     base_hgbc_kwargs = dict(
         max_iter=200,
-        max_depth=6,
-        min_samples_leaf=20,
+        max_depth=4,
+        min_samples_leaf=50,
         learning_rate=0.05,
         random_state=42,
     )

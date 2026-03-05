@@ -8,7 +8,7 @@ from sklearn.ensemble import (
 )
 
 
-def build_model():
+def build_model(hgbc_params=None):
     """
     Soft-voting ensemble of a calibrated RandomForest and a
     HistGradientBoostingClassifier. Averaging two complementary
@@ -20,6 +20,9 @@ def build_model():
         miscalibration (critical for temperature-scaled sampling).
     HGBC: gradient-boosted trees; naturally better calibrated than RF,
           handles missing values natively, fast on small datasets.
+
+    hgbc_params: optional dict of HGBC hyperparameters to override defaults
+                 (e.g. from a prior RandomizedSearchCV tuning run).
     """
     rf = CalibratedClassifierCV(
         RandomForestClassifier(
@@ -34,13 +37,16 @@ def build_model():
         cv=3,
         method="sigmoid",
     )
-    hgbc = HistGradientBoostingClassifier(
+    base_hgbc_kwargs = dict(
         max_iter=200,
         max_depth=6,
         min_samples_leaf=20,
         learning_rate=0.05,
         random_state=42,
     )
+    if hgbc_params:
+        base_hgbc_kwargs.update(hgbc_params)
+    hgbc = HistGradientBoostingClassifier(**base_hgbc_kwargs)
     return VotingClassifier([("rf", rf), ("hgbc", hgbc)], voting="soft")
 
 

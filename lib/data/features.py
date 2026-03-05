@@ -146,4 +146,23 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     for col in ball_cols_main:
         data[f"{col}_gap"] = gap_arrays[col]
 
+    # === 11. Co-occurrence scores (vectorized) ===
+    # For each ball, sum how many times its value has historically appeared
+    # in the same draw as each other ball's current value.
+    range_high = config["ball_game_range_high"]
+    n_balls = len(ball_cols_main)
+    cooc_matrix = np.zeros((range_high + 1, range_high + 1), dtype=np.int32)
+    for i in range(n_balls):
+        for j in range(n_balls):
+            if i != j:
+                np.add.at(cooc_matrix, (ball_arr[:, i].astype(int), ball_arr[:, j].astype(int)), 1)
+
+    for idx, col in enumerate(ball_cols_main):
+        col_vals = ball_arr[:, idx].astype(int)
+        other_indices = [k for k in range(n_balls) if k != idx]
+        scores = np.zeros(n, dtype=np.int32)
+        for k in other_indices:
+            scores += cooc_matrix[col_vals, ball_arr[:, k].astype(int)]
+        data[f"{col}_cooccurrence"] = scores
+
     return data

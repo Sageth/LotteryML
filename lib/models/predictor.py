@@ -209,8 +209,8 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     y_all = data[target_cols].shift(-1).iloc[:-1]         # targets: rows 1..n-1
 
     split_idx     = int(len(x_all) * train_ratio)
-    x_train       = x_all.iloc[:split_idx]
-    x_test        = x_all.iloc[split_idx:]
+    x_train       = x_all.iloc[:split_idx].copy()
+    x_test        = x_all.iloc[split_idx:].copy()
     y_train_frame = y_all.iloc[:split_idx]
     y_test_frame  = y_all.iloc[split_idx:]
 

@@ -33,18 +33,32 @@ def _is_diverse(predictions, all_predictions, min_diversity):
     return True
 
 
-def _sample_from_proba(model, input_vector, temperature=1.0):
+def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0):
     """
     Sample from classifier probabilities with temperature scaling.
+
+    smoothing: uniform-mixture weight in [0, 1].  Blends the model's
+               distribution with a uniform prior — equivalent to a
+               Dirichlet(smoothing/K) prior on class probabilities.
+               Prevents mode collapse when one class dominates at
+               near-certainty (e.g. p=0.99 for a single value).
+               Applied before temperature so the scale still shapes
+               the resulting blended distribution.
     """
     proba = model.predict_proba(input_vector)[0]
     classes = model.classes_
+
+    # Uniform mixture (Bayesian smoothing)
+    if smoothing > 0.0:
+        uniform = np.ones(len(classes)) / len(classes)
+        proba = (1.0 - smoothing) * proba + smoothing * uniform
 
     # Temperature scaling
     scaled = np.power(proba, 1.0 / max(temperature, 1e-6))
     scaled /= scaled.sum()
 
-    return int(np.random.choice(classes, p=scaled)), float(np.max(proba))
+    chosen_idx = np.random.choice(len(classes), p=scaled)
+    return int(classes[chosen_idx]), float(scaled[chosen_idx])
 
 
 # ------------------------------------------------------------
@@ -278,9 +292,9 @@ def _temperature_for_regime(regime, config):
     Higher temperature = more exploratory.
     """
     temps = config.get("regime_temperatures", {
-        0: 0.6,   # low entropy → clustering → more deterministic
-        1: 1.0,   # normal entropy
-        2: 1.4    # high entropy → spread → more exploratory
+        0: 0.8,   # low entropy → clustering → somewhat deterministic
+        1: 1.2,   # normal entropy → moderate exploration
+        2: 1.6    # high entropy → spread → more exploratory
     })
     return temps.get(regime, 1.0)
 
@@ -305,6 +319,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     include_extra_in_sum = config.get("include_extra_in_sum", False)
     no_duplicates = config.get("no_duplicates", False)
     min_confidence = config.get("min_confidence", 0.01)
+    smoothing = config.get("prediction_smoothing", 0.3)
     mean_allowance = config["mean_allowance"]
     mode_allowance = config["mode_allowance"]
     stat_mean = stats["mean"]
@@ -342,7 +357,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 model = models[ball]
                 input_vec = _align_input(model, input_vector)
 
-                pred, conf = _sample_from_proba(model, input_vec, temperature)
+                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing)
 
                 # Duplicate check
                 if no_duplicates and pred in used_numbers:
@@ -360,7 +375,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
             if game_has_extra:
                 model = models["extra"]
                 pred, conf = _sample_from_proba(
-                    model, _align_input(model, input_vector), temperature
+                    model, _align_input(model, input_vector), temperature, smoothing
                 )
                 predictions.append(pred)
                 confidences.append(conf)

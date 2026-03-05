@@ -206,4 +206,51 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     # long-term drift (e.g. rule changes that shift number distributions).
     data["draw_index"] = np.arange(n) / max(n - 1, 1)
 
+    # === 17. Decaying frequency (global + positional) ===
+    # Exponential weights: most recent draw = 1.0, each prior row discounted
+    # by freq_decay. Captures structural recency bias without a hard window.
+    freq_decay = config.get("freq_decay", 0.97)
+    decay_weights = freq_decay ** (n - 1 - np.arange(n))  # shape (n,)
+
+    decayed_global = np.zeros(range_high + 1)
+    for k in range(n_balls):
+        np.add.at(decayed_global, ball_arr[:, k].astype(int), decay_weights)
+    for col in ball_cols_main:
+        data[f"{col}_decayed_freq"] = decayed_global[data[col].values.astype(int)]
+
+    for idx, col in enumerate(ball_cols_main):
+        decayed_pos = np.zeros(range_high + 1)
+        np.add.at(decayed_pos, ball_arr[:, idx].astype(int), decay_weights)
+        data[f"{col}_decayed_pos_freq"] = decayed_pos[data[col].values.astype(int)]
+
+    # === 18. Hot/cold momentum ===
+    # Ratio of actual recent count (window=20) to statistically expected count,
+    # minus 1. Positive = "hot", negative = "cold".
+    range_width = config["ball_game_range_high"] - config["ball_game_range_low"] + 1
+    expected_in_window = (20 * n_balls) / range_width
+    for col in ball_cols_main:
+        data[f"{col}_momentum"] = (
+            data[f"{col}_recent_count_20"] / max(expected_in_window, 1e-6) - 1.0
+        )
+
+    # === 19. Decaying co-occurrence ===
+    # Co-occurrence counts weighted by recency: pairs that appeared together
+    # recently contribute more than pairs from distant draws.
+    cooc_decayed = np.zeros((range_high + 1, range_high + 1))
+    for i in range(n_balls):
+        for j in range(n_balls):
+            if i != j:
+                np.add.at(
+                    cooc_decayed,
+                    (ball_arr[:, i].astype(int), ball_arr[:, j].astype(int)),
+                    decay_weights,
+                )
+    for idx, col in enumerate(ball_cols_main):
+        col_vals = ball_arr[:, idx].astype(int)
+        other_indices = [k for k in range(n_balls) if k != idx]
+        scores = np.zeros(n)
+        for k in other_indices:
+            scores += cooc_decayed[col_vals, ball_arr[:, k].astype(int)]
+        data[f"{col}_decayed_cooccurrence"] = scores
+
     return data

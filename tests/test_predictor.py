@@ -42,7 +42,7 @@ def test_predictor_pipeline():
 
     log = DummyLog()
 
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -85,7 +85,7 @@ def test_predictor_pipeline_extra_ball():
         ) for _ in range(100)])
 
     log = DummyLog()
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -124,7 +124,7 @@ def test_predictor_feature_mismatch_and_retry(monkeypatch):
         )
 
     log = DummyLog()
-    monkeypatch.setattr(builder, "build_model", lambda: FakeModel())
+    monkeypatch.setattr(builder, "build_model", lambda **kw: FakeModel())
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -155,7 +155,7 @@ def test_predictor_accuracy_check_failure(monkeypatch):
         )
 
     log = DummyLog()
-    monkeypatch.setattr(builder, "build_model", lambda: ZeroScoreModel())
+    monkeypatch.setattr(builder, "build_model", lambda **kw: ZeroScoreModel())
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = 0.99

@@ -406,7 +406,7 @@ def setup_accuracy_extra_game_dir():
 
 
 def test_evaluate_model_accuracy(setup_accuracy_game_dir):
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
     log = DummyLog()
 
     result = evaluate_model_accuracy(setup_accuracy_game_dir, log)
@@ -421,7 +421,7 @@ def test_evaluate_model_accuracy(setup_accuracy_game_dir):
 
 
 def test_evaluate_model_accuracy_with_extra(setup_accuracy_extra_game_dir):
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
     log = DummyLog()
 
     result = evaluate_model_accuracy(setup_accuracy_extra_game_dir, log)

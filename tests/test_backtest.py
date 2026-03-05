@@ -35,7 +35,7 @@ def test_backtest_pipeline():
     log = DummyLog()
 
     # Monkey-patch fast model
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0

@@ -8,6 +8,7 @@ import pandas as pd
 import random
 from datetime import datetime
 from sklearn.tree import DecisionTreeClassifier as _PruneDT
+from sklearn.model_selection import RandomizedSearchCV
 import lib.models.builder as builder
 
 
@@ -42,6 +43,40 @@ def _sample_from_proba(model, input_vector, temperature=1.0):
     scaled /= scaled.sum()
 
     return int(np.random.choice(classes, p=scaled)), float(np.max(proba))
+
+
+# ------------------------------------------------------------
+#  Hyperparameter tuning helper
+# ------------------------------------------------------------
+_HGBC_SEARCH_SPACE = {
+    "max_iter": [100, 150, 200, 300],
+    "max_depth": [4, 5, 6, 7, 8],
+    "min_samples_leaf": [10, 15, 20, 30, 40],
+    "learning_rate": [0.01, 0.03, 0.05, 0.1, 0.2],
+    "l2_regularization": [0.0, 0.1, 0.5, 1.0],
+}
+
+
+def _tune_hgbc(x_train, y_train, log, n_iter=20):
+    """
+    RandomizedSearchCV over HGBC hyperparameters.
+    Returns the best parameter dict found.
+    """
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    from sklearn.model_selection import TimeSeriesSplit
+    search = RandomizedSearchCV(
+        HistGradientBoostingClassifier(random_state=42),
+        _HGBC_SEARCH_SPACE,
+        n_iter=n_iter,
+        cv=TimeSeriesSplit(n_splits=3),
+        scoring="accuracy",
+        random_state=42,
+        n_jobs=-1,
+        refit=False,
+    )
+    search.fit(x_train, y_train)
+    log.info(f"Best HGBC params: {search.best_params_} (score={search.best_score_:.4f})")
+    return search.best_params_
 
 
 # ------------------------------------------------------------
@@ -82,7 +117,7 @@ def prepare_statistics(data: pd.DataFrame, config: dict, log):
 # ------------------------------------------------------------
 #  Model training
 # ------------------------------------------------------------
-def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, log, force_retrain=False):
+def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, log, force_retrain=False, tune=False):
     data = data.sort_values("Date").reset_index(drop=True)
 
     train_ratio = config.get("train_ratio", 0.8)
@@ -99,6 +134,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     models = {}
     test_scores = {}
+
+    # Load or initialise persisted best HGBC params (keyed by ball name)
+    params_path = os.path.join(gamedir, config["model_save_path"], "best_params.json")
+    os.makedirs(os.path.dirname(params_path), exist_ok=True)
+    if os.path.exists(params_path):
+        with open(params_path) as _f:
+            best_params_store = json.load(_f)
+    else:
+        best_params_store = {}
 
     # --- Main balls (chained: each model sees preceding balls as features) ---
     for ball_idx, ball in enumerate(config["game_balls"]):
@@ -127,11 +171,20 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
+        # Optional hyperparameter tuning: search for best HGBC params, then cache.
+        ball_key = f"Ball{ball}"
+        if tune:
+            log.info(f"Tuning HGBC hyperparameters for Ball{ball}...")
+            best_params_store[ball_key] = _tune_hgbc(x_train_ball, y_train, log)
+            with open(params_path, "w") as _f:
+                json.dump(best_params_store, _f, indent=2)
+
         if os.path.exists(model_path) and not force_retrain:
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")
         else:
-            model = builder.build_model()
+            hgbc_params = best_params_store.get(ball_key)
+            model = builder.build_model(hgbc_params=hgbc_params)
             model.fit(x_train_ball, y_train)
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
@@ -160,11 +213,18 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
         model_path = os.path.join(gamedir, config["model_save_path"], f"{extra_col}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
+        if tune:
+            log.info(f"Tuning HGBC hyperparameters for {extra_col}...")
+            best_params_store["extra"] = _tune_hgbc(x_train, y_train, log)
+            with open(params_path, "w") as _f:
+                json.dump(best_params_store, _f, indent=2)
+
         if os.path.exists(model_path) and not force_retrain:
             model = joblib.load(model_path)
             log.info(f"Loaded existing model: {model_path}")
         else:
-            model = builder.build_model_classifier()
+            hgbc_params = best_params_store.get("extra")
+            model = builder.build_model(hgbc_params=hgbc_params)
             model.fit(x_train, y_train)
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")

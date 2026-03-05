@@ -58,7 +58,7 @@ def test_predictor_pipeline_small_data():
     log = DummyLog()
 
     # Monkey-patch fast model
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -108,7 +108,7 @@ def test_predictor_pipeline_zero_runs():
 
     log = DummyLog()
 
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda **kw: LinearRegression()
 
     config["test_prediction_runs"] = 0  # 🚀 No runs
     config["accuracy_allowance"] = -1.0
@@ -153,7 +153,7 @@ def test_force_retrain_on_feature_mismatch():
     log = DummyLog()
 
     # Force fast model
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda **kw: LinearRegression()
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -199,7 +199,7 @@ def test_generate_predictions_missing_feature():
 
     log = DummyLog()
 
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda **kw: LinearRegression()
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -244,7 +244,7 @@ def test_generate_predictions_duplicate_retry():
 
     log = DummyLog()
 
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -283,7 +283,7 @@ def test_generate_predictions_test_mode_skip_retry():
 
     log = DummyLog()
 
-    builder.build_model = lambda: RandomForestClassifier(n_estimators=3, random_state=42)
+    builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -377,7 +377,7 @@ def test_predictor_fallback_no_feature_names():
 
     log = DummyLog()
 
-    builder.build_model = lambda: SimpleModel()
+    builder.build_model = lambda **kw: SimpleModel()
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -402,7 +402,7 @@ def test_predictor_retry_duplicate_numbers():
 
     # Each model always predicts a distinct value
     values = iter([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
-    builder.build_model = lambda: DuplicateModel(next(values))
+    builder.build_model = lambda **kw: DuplicateModel(next(values))
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
@@ -445,7 +445,7 @@ def test_generate_predictions_missing_columns_error():
 
     log = DummyLog()
 
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda **kw: LinearRegression()
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0

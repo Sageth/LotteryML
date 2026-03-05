@@ -71,7 +71,7 @@ def run_lottery(gamedir, args):
     stats = prepare_statistics(data, config, log)
 
     log.info("Training or loading models...")
-    models, test_scores = build_models(data, config, gamedir, stats, log, force_retrain=args.force_retrain)
+    models, test_scores = build_models(data, config, gamedir, stats, log, force_retrain=args.force_retrain, tune=args.tune)
 
     log.info("Generating predictions...")
     predictions = generate_predictions(data, config, models, stats, log, test_scores, test_mode=args.test_mode)
@@ -116,6 +116,8 @@ def main():
     parser.add_argument("--test-mode", action="store_true", help="Disable filtering checks for predictions")
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy evaluation (overall)")
     parser.add_argument("--accuracy-regimes", action="store_true", help="Run regime-aware accuracy evaluation")
+    parser.add_argument("--tune", action="store_true",
+                        help="Run RandomizedSearchCV to tune HGBC hyperparameters before training")
     parser.add_argument("--automerge", action="store_true",
                         help="Automatically commit and merge prediction updates to GitHub")
 

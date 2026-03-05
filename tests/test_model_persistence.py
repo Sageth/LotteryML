@@ -33,7 +33,7 @@ def test_model_persistence():
     log = DummyLog()
 
     # Force simple fast model
-    builder.build_model = lambda: LinearRegression()
+    builder.build_model = lambda **kw: LinearRegression()
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0

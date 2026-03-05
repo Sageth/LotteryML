@@ -241,11 +241,16 @@ def evaluate_model_accuracy(gamedir, log):
         # Prepare input vector
         x_row = row.drop(labels=["Date"] + stats["ball_cols"] + ["sum"]).to_frame().T
 
-        # Model prediction (probability-based)
+        # Model prediction (chained: each prediction feeds into the next)
         predicted = []
-        for ball in config["game_balls"]:
-            pred, _ = _sample_from_proba(models[ball], x_row, temperature=1.0)
+        predicted_chain = {}
+        for ball_idx, ball in enumerate(config["game_balls"]):
+            x_ball = x_row.copy()
+            for pb in config["game_balls"][:ball_idx]:
+                x_ball[f"chain_ball{pb}"] = predicted_chain[pb]
+            pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
             predicted.append(pred)
+            predicted_chain[ball] = pred
 
         if config.get("game_has_extra", False):
             pred, _ = _sample_from_proba(models["extra"], x_row, temperature=1.0)

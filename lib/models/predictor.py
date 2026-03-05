@@ -83,10 +83,17 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     models = {}
     test_scores = {}
 
-    # --- Main balls ---
-    for ball in config["game_balls"]:
+    # --- Main balls (chained: each model sees preceding balls as features) ---
+    for ball_idx, ball in enumerate(config["game_balls"]):
+        preceding = config["game_balls"][:ball_idx]
         y_train = train_data[f"Ball{ball}"]
         y_test = test_data[f"Ball{ball}"]
+
+        x_train_ball = x_train.copy()
+        x_test_ball = x_test.copy()
+        for pb in preceding:
+            x_train_ball[f"chain_ball{pb}"] = train_data[f"Ball{pb}"].values
+            x_test_ball[f"chain_ball{pb}"] = test_data[f"Ball{pb}"].values
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -96,11 +103,11 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             log.info(f"Loaded existing model: {model_path}")
         else:
             model = builder.build_model()
-            model.fit(x_train, y_train)
+            model.fit(x_train_ball, y_train)
             joblib.dump(model, model_path)
             log.info(f"Trained and saved new model: {model_path}")
 
-        test_score = model.score(x_test, y_test)
+        test_score = model.score(x_test_ball, y_test)
         test_scores[ball] = test_score
         log.info(f"Ball{ball} test accuracy: {test_score:.4f}")
 
@@ -194,11 +201,16 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             valid = True
 
-            # Predict main balls
-            for ball in config["game_balls"]:
+            # Predict main balls (chained: each prediction feeds into the next)
+            predicted_chain = {}
+            for ball_idx, ball in enumerate(config["game_balls"]):
                 model = models[ball]
 
-                pred, conf = _sample_from_proba(model, input_vector, temperature)
+                input_vec = input_vector.copy()
+                for pb in config["game_balls"][:ball_idx]:
+                    input_vec[f"chain_ball{pb}"] = predicted_chain[pb]
+
+                pred, conf = _sample_from_proba(model, input_vec, temperature)
 
                 # Duplicate check
                 if no_duplicates and pred in used_numbers:
@@ -206,6 +218,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                     break
 
                 used_numbers.add(pred)
+                predicted_chain[ball] = pred
                 predictions.append(pred)
                 confidences.append(conf)
 

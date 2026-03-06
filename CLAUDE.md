@@ -80,6 +80,13 @@ Tests live in `tests/` with shared fixtures in `tests/conftest.py`. The `test_co
 
 ### Changes
 All changes must occur via a pull request. Never commit directly to main.
+
+After a PR is merged:
+1. Pull main to update the local copy: `git pull`
+2. Delete the remote branch: `git push origin --delete <branch-name>`
+
+Also periodically audit open PRs (`gh pr list --state open`) and close any superseded ones, deleting their remote branches too.
+
 Before pushing a pull request, you must pass **both** checks:
 
 1. Unit tests:

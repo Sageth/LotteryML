@@ -4,6 +4,13 @@ import argparse
 import os
 import warnings
 
+# Cap OpenMP threads before sklearn imports. On many-core machines (e.g. 24 cores)
+# HGBC spawns one OMP thread per core per parallel region; for small datasets
+# (few thousand rows) the thread-creation overhead far outweighs any speedup,
+# causing each HGBC iteration to take seconds instead of milliseconds.
+# OMP_NUM_THREADS=4 keeps parallelism without the overhead.
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+
 from dotenv import load_dotenv
 
 from lib.config.loader import load_config, evaluate_config

@@ -1,5 +1,8 @@
-import pytest
 import os
+# Must be set before sklearn is imported to prevent OMP thread explosion on many-core machines
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+
+import pytest
 import shutil
 from pathlib import Path
 from lib.config.loader import load_config, evaluate_config

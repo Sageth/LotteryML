@@ -67,8 +67,19 @@ def run_lottery(gamedir, args):
         log.info("Accuracy evaluation complete.")
         return
 
+    def run_automerge():
+        log.info("Running GitHub automerge workflow...")
+        if not github_pat or not repo_path or not github_owner or not github_repo:
+            log.error("Missing GitHub environment variables. Automerge aborted.")
+            return
+        automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
+            github_repo_name=github_repo, )
+        automator.run_automerge_workflow()
+
     # Skip if already predicted today
     if not args.force_retrain and should_skip_predictions(gamedir, log):
+        if args.automerge:
+            run_automerge()
         return
 
     log.info("Loading raw data...")
@@ -98,18 +109,8 @@ def run_lottery(gamedir, args):
     log.info("Exporting predictions...")
     export_predictions(predictions, gamedir, log)
 
-    # ------------------------------------------------------------
-    # AUTOMERGE WORKFLOW
-    # ------------------------------------------------------------
     if args.automerge:
-        log.info("Running GitHub automerge workflow...")
-
-        if not github_pat or not repo_path or not github_owner or not github_repo:
-            log.error("Missing GitHub environment variables. Automerge aborted.")
-        else:
-            automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
-                github_repo_name=github_repo, )
-            automator.run_automerge_workflow()
+        run_automerge()
 
     log.info("Done.")
 

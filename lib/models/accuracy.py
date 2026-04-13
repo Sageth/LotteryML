@@ -289,12 +289,35 @@ def evaluate_model_accuracy(gamedir, log):
             "hit_distribution": dict(pd.Series(hits).value_counts().sort_index())
         }
 
+    # Permutation test: is the model significantly better than each baseline?
+    def permutation_p_value(model_h, baseline_h, n_permutations=10000):
+        """One-sided p-value: probability that the observed advantage is due to chance."""
+        model_arr = np.array(model_h)
+        baseline_arr = np.array(baseline_h)
+        observed_diff = model_arr.mean() - baseline_arr.mean()
+        combined = np.concatenate([model_arr, baseline_arr])
+        n = len(model_arr)
+        count = 0
+        for _ in range(n_permutations):
+            np.random.shuffle(combined)
+            count += (combined[:n].mean() - combined[n:].mean()) >= observed_diff
+        return count / n_permutations
+
     results = [
         summarize("model", model_hits),
         summarize("uniform_random", uniform_hits),
         summarize("frequency_weighted", freq_hits),
         summarize("recency_weighted", recency_hits)
     ]
+
+    # Add significance vs each baseline
+    for baseline_name, baseline_hits in [
+        ("uniform_random", uniform_hits),
+        ("frequency_weighted", freq_hits),
+        ("recency_weighted", recency_hits),
+    ]:
+        p = permutation_p_value(model_hits, baseline_hits)
+        results[0][f"p_vs_{baseline_name}"] = p
 
     # Regime-specific summaries
     regime_results = {}
@@ -313,6 +336,15 @@ def evaluate_model_accuracy(gamedir, log):
     for r in results:
         log.info(f"{r['name']}: avg_hits={r['avg_hits']:.4f}, distribution={r['hit_distribution']}")
 
+    # Report significance
+    model_result = results[0]
+    for key in ["p_vs_uniform_random", "p_vs_frequency_weighted", "p_vs_recency_weighted"]:
+        if key in model_result:
+            baseline = key.replace("p_vs_", "")
+            p = model_result[key]
+            sig = "significant (p<0.05)" if p < 0.05 else "NOT significant"
+            log.info(f"Model vs {baseline}: p={p:.4f} — {sig}")
+
     log.info("=== Regime-Specific Accuracy ===")
     for r in [0, 1, 2]:
         rr = regime_results[r]
@@ -322,9 +354,9 @@ def evaluate_model_accuracy(gamedir, log):
     # Uses a lightweight HGBC (not the full ensemble) per fold for speed.
     # Targets are shifted by 1 to match the training setup: predict draw i+1
     # from draw i's features (same as build_models and generate_predictions).
-    log.info("=== Walk-Forward Cross-Validation (3 folds) ===")
+    log.info("=== Walk-Forward Cross-Validation (5 folds) ===")
     import lib.models.builder as _builder
-    tscv = TimeSeriesSplit(n_splits=3)
+    tscv = TimeSeriesSplit(n_splits=5)
     x_full = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"]).iloc[:-1]
 
     for ball in config["game_balls"]:

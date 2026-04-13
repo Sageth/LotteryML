@@ -108,21 +108,23 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     entropy_main = data["entropy"].values
 
     if entropy_windows:
-        entropy_arr = data[[f"entropy_{w}" for w in entropy_windows]].values  # (n, k)
         if low_thr is None or high_thr is None:
-            # Per-row percentiles across entropy scales — matches original per-row behavior
-            low_thr_arr = np.percentile(entropy_arr, 33, axis=1)
-            high_thr_arr = np.percentile(entropy_arr, 66, axis=1)
+            # Global percentiles of primary entropy across all rows — gives
+            # ~33% of draws in each regime.  The previous per-row percentile
+            # approach (axis=1 across only 3 windows) caused the middle
+            # window to almost always land in regime 1.
+            low_thr_val = np.percentile(entropy_main, 33)
+            high_thr_val = np.percentile(entropy_main, 66)
         else:
-            low_thr_arr = np.full(n, low_thr)
-            high_thr_arr = np.full(n, high_thr)
+            low_thr_val = low_thr
+            high_thr_val = high_thr
     else:
-        low_thr_arr = np.zeros(n)
-        high_thr_arr = np.zeros(n)
+        low_thr_val = 0.0
+        high_thr_val = 0.0
 
     data["regime"] = np.where(
-        entropy_main < low_thr_arr, 0,
-        np.where(entropy_main > high_thr_arr, 2, 1)
+        entropy_main < low_thr_val, 0,
+        np.where(entropy_main > high_thr_val, 2, 1)
     )
 
     # === 9. Global frequency per ball (vectorized lookup) ===

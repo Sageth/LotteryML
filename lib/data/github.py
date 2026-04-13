@@ -42,11 +42,8 @@ class GitHubAutoMerge:
             # Initialize GitPython repository object
             self.repo = git.Repo(self.repo_path)
 
-            # Configure commit signing from environment variables
-            self.signing_key = os.getenv("GIT_SIGNING_KEY")
-            self.sign_commits = os.getenv("GIT_SIGN_COMMITS", "false").lower() == "true"
-            if self.sign_commits:
-                print(f"Commit signing enabled.")
+            # Commit signing is now handled entirely by git config
+            # (commit.gpgsign + gpg.format). No env vars needed.
 
             # Initialize PyGithub client
             self.g = Github(self.github_pat)
@@ -118,12 +115,11 @@ class GitHubAutoMerge:
             new_branch = self.repo.create_head(new_branch_name, commit=remote_main.commit)
             new_branch.checkout()
 
-            # Commit with signing
-            # self.repo.index.commit(commit_message)  # Causes unverified commits
-            if self.sign_commits and self.signing_key:
-                self.repo.git.commit('-m', commit_message, '-S')
-            else:
-                self.repo.git.commit('-m', commit_message)
+            # Commit — signing is handled by git config (commit.gpgsign).
+            # Avoid passing -S explicitly: it forces GPG-style signing and
+            # breaks when gpg.format=ssh (SSH key signing), which uses a
+            # different temp-file path that the -S flag doesn't respect.
+            self.repo.git.commit('-m', commit_message)
 
             print(f"Committed changes on branch '{new_branch_name}'.")
 

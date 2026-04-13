@@ -562,6 +562,23 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
             log.warning(f"Run {runs_completed+1}: Max retries exceeded, skipping.")
             runs_completed += 1
 
+    # Consensus prediction: majority vote per ball position across all runs
+    valid_runs = [p for p in all_predictions if "predicted" in p]
+    if len(valid_runs) >= 2:
+        from collections import Counter
+        consensus = []
+        for pos_idx in range(len(valid_runs[0]["predicted"])):
+            counts = Counter(r["predicted"][pos_idx] for r in valid_runs)
+            consensus.append(counts.most_common(1)[0][0])
+        all_predictions.append({
+            "run": "consensus",
+            "date": today_str,
+            "predicted": consensus,
+            "method": "majority_vote",
+            "based_on_runs": len(valid_runs),
+        })
+        log.info(f"[Consensus] Majority vote from {len(valid_runs)} runs: {consensus}")
+
     return all_predictions
 
 

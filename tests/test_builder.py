@@ -6,6 +6,7 @@ from sklearn.ensemble import (
     RandomForestClassifier,
     VotingClassifier,
 )
+from sklearn.linear_model import LogisticRegression
 
 from lib.models.builder import build_model, build_cv_model
 
@@ -16,6 +17,7 @@ def test_build_model_returns_voting_classifier():
     assert isinstance(model.estimators[0][1], CalibratedClassifierCV)
     assert isinstance(model.estimators[0][1].estimator, RandomForestClassifier)
     assert isinstance(model.estimators[1][1], HistGradientBoostingClassifier)
+    assert isinstance(model.estimators[2][1], LogisticRegression)
 
 
 def test_build_cv_model_returns_hgbc():

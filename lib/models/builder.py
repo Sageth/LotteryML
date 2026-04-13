@@ -6,6 +6,7 @@ from sklearn.ensemble import (
     RandomForestClassifier,
     VotingClassifier,
 )
+from sklearn.linear_model import LogisticRegression
 
 
 def build_model(hgbc_params=None, calibration_cv=2):
@@ -54,7 +55,13 @@ def build_model(hgbc_params=None, calibration_cv=2):
     if hgbc_params:
         base_hgbc_kwargs.update(hgbc_params)
     hgbc = HistGradientBoostingClassifier(**base_hgbc_kwargs)
-    return VotingClassifier([("rf", rf), ("hgbc", hgbc)], voting="soft")
+    lr = LogisticRegression(
+        max_iter=1000,
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
+    )
+    return VotingClassifier([("rf", rf), ("hgbc", hgbc), ("lr", lr)], voting="soft")
 
 
 def build_cv_model():

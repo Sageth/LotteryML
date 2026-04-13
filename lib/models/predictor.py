@@ -280,16 +280,18 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
         y_cal      = y_train.iloc[cal_idx:]
 
         # Feature pruning on the fit portion only.
-        pruning_threshold = config.get("feature_pruning_threshold", 1e-4)
+        pruning_threshold = config.get("feature_pruning_threshold", 1e-3)
         if pruning_threshold > 0:
             prune_m = _PruneDT(max_depth=8, random_state=42)
             prune_m.fit(x_fit_ball, y_fit)
             mask = prune_m.feature_importances_ >= pruning_threshold
             if mask.sum() >= 5:
+                n_before = len(x_fit_ball.columns)
                 keep = x_fit_ball.columns[mask].tolist()
                 x_fit_ball  = x_fit_ball[keep]
                 x_cal_ball  = x_cal_ball[keep]
                 x_test_ball = x_test_ball[keep]
+                log.info(f"Ball{ball}: pruned {n_before - len(keep)}/{n_before} features (kept {len(keep)})")
 
         model_path = os.path.join(gamedir, config["model_save_path"], f"Ball{ball}.joblib")
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -420,12 +422,12 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     today_str = datetime.now().strftime('%Y-%m-%d')
 
     max_runs = config.get("test_prediction_runs", 10)
-    max_retries = config.get("max_prediction_retries", 20)
+    max_retries = config.get("max_prediction_retries", 50)
 
     # Hoist loop-invariant config/stats lookups
     num_main = len(config["game_balls"])
     game_has_extra = config.get("game_has_extra", False)
-    min_diversity = config.get("min_prediction_diversity", 2)
+    min_diversity = config.get("min_prediction_diversity", 3)
     include_extra_in_sum = config.get("include_extra_in_sum", False)
     no_duplicates = config.get("no_duplicates", False)
     min_confidence = config.get("min_confidence", 0.01)

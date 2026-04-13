@@ -45,12 +45,13 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             data[f"{col}_lag{lag}_appeared"] = (lagged[col] == data[col]).astype(int)
 
     # === 3. Recent count features (vectorized via rolling one-hot) ===
+    recent_count_windows = config.get("recent_count_windows", [5, 10, 20, 50])
     for col in ball_cols_main:
         # shift(1) excludes the current row from its own window count
         shifted_dummies = pd.get_dummies(data[col]).shift(1).fillna(0)
         col_idx_map = {v: i for i, v in enumerate(shifted_dummies.columns)}
         row_col_indices = data[col].map(col_idx_map).fillna(0).astype(int).values
-        for window in [5, 10, 20]:
+        for window in recent_count_windows:
             rolling_w = shifted_dummies.rolling(window, min_periods=1).sum()
             data[f"{col}_recent_count_{window}"] = rolling_w.values[
                 np.arange(n), row_col_indices
@@ -66,6 +67,13 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     rolling_sum = data["sum"].rolling(11, min_periods=1)
     rolling_std = rolling_sum.std().fillna(0)
     data["sum_zscore"] = (data["sum"] - rolling_sum.mean()) / (rolling_std + 1e-6)
+
+    # === 5b. Sum trend features (multi-scale rolling statistics) ===
+    # Captures whether recent sums are trending higher/lower and whether
+    # volatility is changing — complements sum_zscore's single window.
+    for w in [5, 20, 50]:
+        data[f"sum_rolling_mean_{w}"] = data["sum"].rolling(w, min_periods=1).mean()
+        data[f"sum_rolling_std_{w}"] = data["sum"].rolling(w, min_periods=1).std().fillna(0)
 
     # === 6. Even/odd count (vectorized) ===
     ball_arr_all = data[ball_cols_all].values
@@ -185,15 +193,23 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         pos_freq = data[col].value_counts().to_dict()
         data[f"{col}_pos_freq"] = data[col].map(pos_freq).fillna(0).astype(int)
 
+    # Defragment: sections 1-13 added many columns individually; consolidate
+    # before sections 14-16 to silence PerformanceWarning.
+    data = data.copy()
+
     # === 14. Draw spread features ===
     # Range and average gap between consecutive sorted balls capture
     # whether a draw is tightly clustered or widely spread.
     sorted_arr = np.sort(ball_arr, axis=1)
     data["draw_range"] = sorted_arr[:, -1] - sorted_arr[:, 0]
     if ball_arr.shape[1] > 1:
-        data["draw_mean_gap"] = np.diff(sorted_arr, axis=1).mean(axis=1)
+        diffs = np.diff(sorted_arr, axis=1)
+        data["draw_mean_gap"] = diffs.mean(axis=1)
+        # Consecutive number count: pairs of adjacent numbers in a draw
+        data["consecutive_count"] = (diffs == 1).sum(axis=1)
     else:
         data["draw_mean_gap"] = 0.0
+        data["consecutive_count"] = 0
 
     # === 15. Zone counts (low / mid / high third of the range) ===
     range_span = config["ball_game_range_high"] - config["ball_game_range_low"] + 1

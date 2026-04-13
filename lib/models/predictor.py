@@ -77,12 +77,14 @@ def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
 # ------------------------------------------------------------
 def _calibrate_temperature(model, x_cal, y_cal):
     """
-    Find the temperature T in [1.0, 8.0] that minimises negative log-likelihood
+    Find the temperature T in [0.3, 5.0] that minimises negative log-likelihood
     on the held-out calibration set — the standard 'temperature scaling' form
     of Platt calibration.  T > 1 means the model was overconfident (flatten
-    the distribution).  We only search T >= 1.0 because sharpening (T < 1)
-    would undo smoothing and force near-deterministic predictions that fail
-    the statistical diversity filters.
+    the distribution); T < 1 sharpens toward the model's best guesses, which
+    is appropriate for multi-class problems where raw probabilities are already
+    quite diffuse across many classes.  Prediction-time smoothing (uniform +
+    recency blending) separately ensures diversity, so sharpening the base
+    calibration won't cause mode collapse.
 
     Returns the optimal temperature as a float (defaults to 1.0 if calibration
     data is too small or labels don't overlap with training classes).
@@ -104,7 +106,7 @@ def _calibrate_temperature(model, x_cal, y_cal):
     probas = probas[valid_mask]                 # select valid rows positionally
 
     best_temp, best_nll = 1.0, float("inf")
-    for temp in np.linspace(1.0, 8.0, 71):     # ~0.1-step grid, T >= 1.0 only
+    for temp in np.linspace(0.3, 5.0, 95):     # ~0.05-step grid, includes T < 1.0
         scaled = np.power(probas + 1e-12, 1.0 / temp)
         scaled /= scaled.sum(axis=1, keepdims=True)
         nll = -np.log(scaled[np.arange(len(true_idx)), true_idx] + 1e-12).mean()

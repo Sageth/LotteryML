@@ -83,16 +83,9 @@ class GitHubAutoMerge:
             print("Initialization failed. Cannot proceed.")
             return
 
-        # Stage everything first, then check if there's anything to do
-        print("Staging all modified and untracked files...")
-        try:
-            self.repo.git.add(A=True)
-        except Exception as e:
-            print(f"Error staging files: {e}")
-            return
-
-        if not self.repo.index.diff("HEAD"):
-            print("No staged changes to commit. Aborting automerge workflow.")
+        # Bail out early if there's nothing to commit
+        if not self.repo.is_dirty(index=True, working_tree=True, untracked_files=True):
+            print("No changes to commit. Aborting automerge workflow.")
             return
 
         # Fetch latest remote state so the new branch is up to date
@@ -114,6 +107,14 @@ class GitHubAutoMerge:
             remote_main = self.repo.remotes[self.remote_name].refs[self.main_branch]
             new_branch = self.repo.create_head(new_branch_name, commit=remote_main.commit)
             new_branch.checkout()
+
+            # Stage everything now that we're on the new branch
+            print("Staging all modified and untracked files...")
+            self.repo.git.add(A=True)
+
+            if not self.repo.index.diff("HEAD"):
+                print("No staged changes to commit. Aborting automerge workflow.")
+                return
 
             # Commit — signing is handled by git config (commit.gpgsign).
             # Avoid passing -S explicitly: it forces GPG-style signing and

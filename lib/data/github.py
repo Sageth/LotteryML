@@ -116,10 +116,11 @@ class GitHubAutoMerge:
                 print("No staged changes to commit. Aborting automerge workflow.")
                 return
 
-            # Disable signing for this commit: the SSH signing agent socket is
-            # not available when running under a system service (no user session),
-            # causing "Permission denied" on /run/user/1000/.git_signing_buffer_tmp*.
-            self.repo.git.execute(['git', '-c', 'commit.gpgsign=false', 'commit', '-m', commit_message])
+            # The service sets TMPDIR=/run/user/1000, which only exists during an active
+            # login session. Git writes the SSH signing buffer there, failing at midnight
+            # when no session is open. Override TMPDIR to /tmp for this commit only.
+            with self.repo.git.custom_environment(TMPDIR='/tmp'):
+                self.repo.git.commit('-m', commit_message)
 
             print(f"Committed changes on branch '{new_branch_name}'.")
 

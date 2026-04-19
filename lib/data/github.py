@@ -116,11 +116,10 @@ class GitHubAutoMerge:
                 print("No staged changes to commit. Aborting automerge workflow.")
                 return
 
-            # Commit — signing is handled by git config (commit.gpgsign).
-            # Avoid passing -S explicitly: it forces GPG-style signing and
-            # breaks when gpg.format=ssh (SSH key signing), which uses a
-            # different temp-file path that the -S flag doesn't respect.
-            self.repo.git.commit('-m', commit_message)
+            # Disable signing for this commit: the SSH signing agent socket is
+            # not available when running under a system service (no user session),
+            # causing "Permission denied" on /run/user/1000/.git_signing_buffer_tmp*.
+            self.repo.git.execute(['git', '-c', 'commit.gpgsign=false', 'commit', '-m', commit_message])
 
             print(f"Committed changes on branch '{new_branch_name}'.")
 

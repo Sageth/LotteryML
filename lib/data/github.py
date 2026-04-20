@@ -116,11 +116,7 @@ class GitHubAutoMerge:
                 print("No staged changes to commit. Aborting automerge workflow.")
                 return
 
-            # The service sets TMPDIR=/run/user/1000, which only exists during an active
-            # login session. Git writes the SSH signing buffer there, failing at midnight
-            # when no session is open. Override TMPDIR to /tmp for this commit only.
-            with self.repo.git.custom_environment(TMPDIR='/tmp'):
-                self.repo.git.commit('-m', commit_message)
+            self.repo.git.commit('-m', commit_message)
 
             print(f"Committed changes on branch '{new_branch_name}'.")
 

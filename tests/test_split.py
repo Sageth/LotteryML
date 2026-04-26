@@ -8,15 +8,15 @@ from lib.data.normalize import normalize_features
 
 def test_time_split():
     # Create dummy data
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({
         "Date": dates,
-        "Ball1": [i % 10 + 1 for i in range(100)],
-        "Ball2": [i % 10 + 2 for i in range(100)],
-        "Ball3": [i % 10 + 3 for i in range(100)],
-        "Ball4": [i % 10 + 4 for i in range(100)],
-        "Ball5": [i % 10 + 5 for i in range(100)],
-        "Ball6": [i % 10 + 6 for i in range(100)]
+        "Ball1": [i % 10 + 1 for i in range(350)],
+        "Ball2": [i % 10 + 2 for i in range(350)],
+        "Ball3": [i % 10 + 3 for i in range(350)],
+        "Ball4": [i % 10 + 4 for i in range(350)],
+        "Ball5": [i % 10 + 5 for i in range(350)],
+        "Ball6": [i % 10 + 6 for i in range(350)]
     })
 
     # Dummy config

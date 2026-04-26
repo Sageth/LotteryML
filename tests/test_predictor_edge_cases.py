@@ -31,7 +31,7 @@ class DuplicateModel:
         return np.array([self.value])
 
     def predict_proba(self, X):
-        return np.array([[1.0]])
+        return np.ones((len(X), 1))
 
     def score(self, X, y): return 1.0  # <--- REQUIRED because build_models calls model.score()
 
@@ -39,13 +39,12 @@ def test_predictor_pipeline_small_data():
     # Load real config
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    # Create small dummy data (only 5 rows)
-    dates = pd.date_range(start="2022-01-01", periods=5, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
 
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(5)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     # Dummy logger
     class DummyLog:
@@ -91,13 +90,12 @@ def test_predictor_pipeline_zero_runs():
     # Load real config
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    # Dummy data
-    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
 
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)
@@ -136,12 +134,11 @@ def test_predictor_pipeline_zero_runs():
 def test_force_retrain_on_feature_mismatch():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    # Create dummy data
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(100)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)
@@ -184,11 +181,11 @@ def test_force_retrain_on_feature_mismatch():
 def test_generate_predictions_missing_feature():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(100)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)
@@ -229,11 +226,11 @@ def test_generate_predictions_missing_feature():
 def test_generate_predictions_duplicate_retry():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(100)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)
@@ -268,11 +265,11 @@ def test_generate_predictions_duplicate_retry():
 def test_generate_predictions_test_mode_skip_retry():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(100)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)
@@ -362,11 +359,11 @@ def test_should_skip_predictions_true_and_false():
 def test_predictor_fallback_no_feature_names():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)
@@ -394,11 +391,11 @@ def test_predictor_fallback_no_feature_names():
 def test_predictor_retry_duplicate_numbers():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     # Each model always predicts a distinct value
     values = iter([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
@@ -430,11 +427,11 @@ def test_predictor_retry_duplicate_numbers():
 def test_generate_predictions_missing_columns_error():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=10, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series(
-            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(10)])
+            [np.random.randint(config["ball_game_range_low"], config["ball_game_range_high"] + 1) for _ in range(350)])
 
     class DummyLog:
         def info(self, msg): print(msg)

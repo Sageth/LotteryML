@@ -56,10 +56,11 @@ def build_model(hgbc_params=None, calibration_cv=2):
         base_hgbc_kwargs.update(hgbc_params)
     hgbc = HistGradientBoostingClassifier(**base_hgbc_kwargs)
     lr = LogisticRegression(
+        solver="newton-cholesky",
+        C=0.1,
         max_iter=1000,
         class_weight="balanced",
         random_state=42,
-        n_jobs=-1,
     )
     return VotingClassifier([("rf", rf), ("hgbc", hgbc), ("lr", lr)], voting="soft")
 

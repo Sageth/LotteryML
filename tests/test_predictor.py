@@ -32,13 +32,13 @@ class ZeroScoreModel(LinearRegression):
 def test_predictor_pipeline():
     config = evaluate_config(load_config("NJ_Pick6"))
 
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
 
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series([np.random.randint(
             config["ball_game_range_low"], config["ball_game_range_high"] + 1
-        ) for _ in range(100)])
+        ) for _ in range(350)])
 
     log = DummyLog()
 
@@ -71,18 +71,18 @@ def test_predictor_pipeline():
 def test_predictor_pipeline_extra_ball():
     config = evaluate_config(load_config("Powerball"))
 
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
 
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series([np.random.randint(
             config["ball_game_range_low"], config["ball_game_range_high"] + 1
-        ) for _ in range(100)])
+        ) for _ in range(350)])
 
     if "game_balls_extra_low" in config and "game_balls_extra_high" in config:
         data["BallExtra"] = pd.Series([np.random.randint(
             config["game_balls_extra_low"], config["game_balls_extra_high"] + 1
-        ) for _ in range(100)])
+        ) for _ in range(350)])
 
     log = DummyLog()
     builder.build_model = lambda **kw: RandomForestClassifier(n_estimators=3, random_state=42)
@@ -116,11 +116,11 @@ def test_predictor_pipeline_extra_ball():
 
 def test_predictor_feature_mismatch_and_retry(monkeypatch):
     config = evaluate_config(load_config("NJ_Pick6"))
-    dates = pd.date_range(start="2022-01-01", periods=50, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = np.random.randint(
-            config["ball_game_range_low"], config["ball_game_range_high"] + 1, size=50
+            config["ball_game_range_low"], config["ball_game_range_high"] + 1, size=350
         )
 
     log = DummyLog()
@@ -147,11 +147,11 @@ def test_predictor_feature_mismatch_and_retry(monkeypatch):
 
 def test_predictor_accuracy_check_failure(monkeypatch):
     config = evaluate_config(load_config("NJ_Pick6"))
-    dates = pd.date_range(start="2022-01-01", periods=30, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = np.random.randint(
-            config["ball_game_range_low"], config["ball_game_range_high"] + 1, size=30
+            config["ball_game_range_low"], config["ball_game_range_high"] + 1, size=350
         )
 
     log = DummyLog()

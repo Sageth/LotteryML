@@ -56,12 +56,12 @@ def clean_model_dir(test_config, game_dir):
 
 @pytest.fixture
 def dummy_data(test_config):
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in test_config["game_balls"]:
         data[f"Ball{i}"] = pd.Series([np.random.randint(
             test_config["ball_game_range_low"], test_config["ball_game_range_high"] + 1
-        ) for _ in range(100)])
+        ) for _ in range(350)])
     return data
 
 def test_conftest_logger(logger):

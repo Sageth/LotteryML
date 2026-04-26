@@ -102,6 +102,7 @@ class GitHubAutoMerge:
         pr_title = f"Auto: Updates via automerge"
         pr_body = f"This PR contains automated updates."
 
+        merged = False
         try:
             # Create and checkout new branch from latest remote main
             remote_main = self.repo.remotes[self.remote_name].refs[self.main_branch]
@@ -132,6 +133,7 @@ class GitHubAutoMerge:
 
             print("Automerge is enabled. Merging the PR...")
             pr.merge()
+            merged = True
             print("Pull request merged successfully.")
 
             # Delete the remote branch after a successful merge
@@ -152,11 +154,12 @@ class GitHubAutoMerge:
         except Exception as e:
             print(f"GitHub API operation failed: {e}")
         finally:
-            try:
-                # Ensure we are not on the branch before deleting it
-                if self.repo.active_branch.name == new_branch_name:
-                    self.repo.git.checkout(self.main_branch)
-                self.repo.delete_head(new_branch_name, force=True)
-                print(f"Deleted local branch '{new_branch_name}'.")
-            except Exception as e:
-                print(f"Warning: could not delete local branch '{new_branch_name}': {e}")
+            if merged:
+                try:
+                    # Ensure we are not on the branch before deleting it
+                    if self.repo.active_branch.name == new_branch_name:
+                        self.repo.git.checkout(self.main_branch)
+                    self.repo.delete_head(new_branch_name)
+                    print(f"Deleted local branch '{new_branch_name}'.")
+                except Exception as e:
+                    print(f"Warning: could not delete local branch '{new_branch_name}': {e}")

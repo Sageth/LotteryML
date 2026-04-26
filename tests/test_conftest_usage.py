@@ -10,5 +10,5 @@ def test_conftest_clean_model_dir(clean_model_dir, test_config, game_dir):
     assert model_dir.exists()
 
 def test_conftest_dummy_data(dummy_data):
-    assert len(dummy_data) == 100
+    assert len(dummy_data) == 350
     assert "Date" in dummy_data.columns

@@ -17,12 +17,12 @@ def test_model_persistence():
     config = evaluate_config(load_config("NJ_Pick6"))
 
     # Dummy data
-    dates = pd.date_range(start="2022-01-01", periods=100, freq="D")
+    dates = pd.date_range(start="2022-01-01", periods=350, freq="D")
     data = pd.DataFrame({"Date": dates})
     for i in config["game_balls"]:
         data[f"Ball{i}"] = pd.Series([np.random.randint(
             config["ball_game_range_low"], config["ball_game_range_high"] + 1
-        ) for _ in range(100)])
+        ) for _ in range(350)])
 
     # Dummy logger
     class DummyLog:

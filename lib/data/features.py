@@ -58,8 +58,7 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             ]
 
     # === 4. Global frequency (long-term bias) ===
-    flat_numbers = data[ball_cols_main].values.flatten()
-    global_frequency = pd.Series(flat_numbers).value_counts().to_dict()
+    # Computed incrementally per-row in section 9 to avoid future-data leakage.
 
     # === 5. Sum and sum_zscore (vectorized) ===
     # Window of 11 = current row + up to 10 preceding, matching original slice behavior
@@ -84,6 +83,9 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     # === 7. Multi-scale entropy (numpy — avoids pandas overhead per row) ===
     entropy_windows = sorted(set(config.get("entropy_windows", [10, 25, 50])))
     ball_arr = data[ball_cols_main].values  # (n, n_balls) numpy array
+    n_balls = len(ball_cols_main)
+    range_high = config["ball_game_range_high"]
+    range_max = range_high + 1
 
     for w in entropy_windows:
         entropies = np.zeros(n)
@@ -135,9 +137,18 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         np.where(entropy_main > high_thr_val, 2, 1)
     )
 
-    # === 9. Global frequency per ball (vectorized lookup) ===
-    for col in ball_cols_main:
-        data[f"{col}_global_freq"] = data[col].map(global_frequency).fillna(0).astype(int)
+    # === 9. Global frequency per ball (vectorized cumulative — leak-free) ===
+    # For row i, counts how many times that ball value appeared across ALL positions
+    # in rows 0..i-1. Uses cumsum+shift so each row sees only its past.
+    running_global = np.zeros((n, range_max), dtype=np.int32)
+    for k in range(n_balls):
+        running_global[np.arange(n), ball_arr[:, k].astype(int)] += 1
+    running_global = np.vstack([
+        np.zeros((1, range_max), dtype=np.int32),
+        np.cumsum(running_global, axis=0)[:-1],
+    ])
+    for idx, col in enumerate(ball_cols_main):
+        data[f"{col}_global_freq"] = running_global[np.arange(n), ball_arr[:, idx].astype(int)]
 
     # === 10. Gap tracking (sequential — state-dependent with within-row updates) ===
     number_last_seen = {
@@ -156,24 +167,25 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     for col in ball_cols_main:
         data[f"{col}_gap"] = gap_arrays[col]
 
-    # === 11. Co-occurrence scores (vectorized) ===
-    # For each ball, sum how many times its value has historically appeared
-    # in the same draw as each other ball's current value.
-    range_high = config["ball_game_range_high"]
-    n_balls = len(ball_cols_main)
-    cooc_matrix = np.zeros((range_high + 1, range_high + 1), dtype=np.int32)
-    for i in range(n_balls):
-        for j in range(n_balls):
-            if i != j:
-                np.add.at(cooc_matrix, (ball_arr[:, i].astype(int), ball_arr[:, j].astype(int)), 1)
+    # === 11. Co-occurrence scores (sequential, leak-free) ===
+    # For row i, scores how often each ball's value has co-occurred with the
+    # other balls' values in rows 0..i-1 only.
+    pair_pos_r = np.array([p for p in range(n_balls) for q in range(n_balls) if p != q])
+    pair_pos_c = np.array([q for p in range(n_balls) for q in range(n_balls) if p != q])
+    partner_masks = [pair_pos_r == idx for idx in range(n_balls)]
 
-    for idx, col in enumerate(ball_cols_main):
-        col_vals = ball_arr[:, idx].astype(int)
-        other_indices = [k for k in range(n_balls) if k != idx]
-        scores = np.zeros(n, dtype=np.int32)
-        for k in other_indices:
-            scores += cooc_matrix[col_vals, ball_arr[:, k].astype(int)]
-        data[f"{col}_cooccurrence"] = scores
+    cooc_running = np.zeros((range_max, range_max), dtype=np.int32)
+    cooc_scores = {col: np.zeros(n, dtype=np.int32) for col in ball_cols_main}
+
+    for i in range(n):
+        row_vals = ball_arr[i].astype(int)
+        for idx, col in enumerate(ball_cols_main):
+            v = row_vals[idx]
+            cooc_scores[col][i] = cooc_running[v, row_vals[pair_pos_c[partner_masks[idx]]]].sum()
+        np.add.at(cooc_running, (row_vals[pair_pos_r], row_vals[pair_pos_c]), 1)
+
+    for col in ball_cols_main:
+        data[f"{col}_cooccurrence"] = cooc_scores[col]
 
     # === 12. Date/schedule features (cyclical encoding) ===
     # Sine/cosine encoding preserves cyclical adjacency (e.g. Sun/Mon are neighbors).
@@ -186,12 +198,18 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     data["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12)
     data["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12)
 
-    # === 13. Positional frequency ===
-    # How often each value appears specifically in this ball position
-    # (distinct from global_freq which pools across all positions).
-    for col in ball_cols_main:
-        pos_freq = data[col].value_counts().to_dict()
-        data[f"{col}_pos_freq"] = data[col].map(pos_freq).fillna(0).astype(int)
+    # === 13. Positional frequency (vectorized cumulative — leak-free) ===
+    # For row i, counts how many times that ball value appeared in THIS position
+    # across rows 0..i-1 only.
+    for idx, col in enumerate(ball_cols_main):
+        col_vals = ball_arr[:, idx].astype(int)
+        pos_inc = np.zeros((n, range_max), dtype=np.int32)
+        pos_inc[np.arange(n), col_vals] = 1
+        cumpos = np.vstack([
+            np.zeros((1, range_max), dtype=np.int32),
+            np.cumsum(pos_inc, axis=0)[:-1],
+        ])
+        data[f"{col}_pos_freq"] = cumpos[np.arange(n), col_vals]
 
     # Defragment: sections 1-13 added many columns individually; consolidate
     # before sections 14-16 to silence PerformanceWarning.
@@ -229,24 +247,40 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     # pandas stores them in separate internal blocks; copying consolidates them.
     data = data.copy()
 
-    # === 17. Decaying frequency (global + positional) ===
-    # Exponential weights: most recent draw = 1.0, each prior row discounted
-    # by freq_decay. Captures structural recency bias without a hard window.
+    # === 17. Decaying frequency (global + positional, online — leak-free) ===
+    # === 19. Decaying co-occurrence (online — leak-free) ===
+    # Both use the same sequential pass: read features for row i from running
+    # state (history 0..i-1), then update: decay × state + row i's contributions.
     freq_decay = config.get("freq_decay", 0.97)
-    decay_weights = freq_decay ** (n - 1 - np.arange(n))  # shape (n,)
-
-    decayed_global = np.zeros(range_high + 1)
-    for k in range(n_balls):
-        np.add.at(decayed_global, ball_arr[:, k].astype(int), decay_weights)
+    decayed_global_running = np.zeros(range_max)
+    decayed_pos_running = np.zeros((n_balls, range_max))
+    decayed_cooc_running = np.zeros((range_max, range_max))
 
     new_cols: dict = {}
-    for col in ball_cols_main:
-        new_cols[f"{col}_decayed_freq"] = decayed_global[data[col].values.astype(int)]
+    decayed_global_vals = {col: np.zeros(n) for col in ball_cols_main}
+    decayed_pos_vals = {col: np.zeros(n) for col in ball_cols_main}
+    decayed_cooc_vals = {col: np.zeros(n) for col in ball_cols_main}
 
-    for idx, col in enumerate(ball_cols_main):
-        decayed_pos = np.zeros(range_high + 1)
-        np.add.at(decayed_pos, ball_arr[:, idx].astype(int), decay_weights)
-        new_cols[f"{col}_decayed_pos_freq"] = decayed_pos[data[col].values.astype(int)]
+    for i in range(n):
+        row_vals = ball_arr[i].astype(int)
+        for idx, col in enumerate(ball_cols_main):
+            v = row_vals[idx]
+            decayed_global_vals[col][i] = decayed_global_running[v]
+            decayed_pos_vals[col][i] = decayed_pos_running[idx, v]
+            decayed_cooc_vals[col][i] = decayed_cooc_running[v, row_vals[pair_pos_c[partner_masks[idx]]]].sum()
+        # decay → then add row i so next iteration sees this row discounted
+        decayed_global_running *= freq_decay
+        decayed_pos_running *= freq_decay
+        decayed_cooc_running *= freq_decay
+        for k in range(n_balls):
+            decayed_global_running[row_vals[k]] += 1
+            decayed_pos_running[k, row_vals[k]] += 1
+        np.add.at(decayed_cooc_running, (row_vals[pair_pos_r], row_vals[pair_pos_c]), 1)
+
+    for col in ball_cols_main:
+        new_cols[f"{col}_decayed_freq"] = decayed_global_vals[col]
+        new_cols[f"{col}_decayed_pos_freq"] = decayed_pos_vals[col]
+        new_cols[f"{col}_decayed_cooccurrence"] = decayed_cooc_vals[col]
 
     # === 18. Hot/cold momentum ===
     # Ratio of actual recent count (window=20) to statistically expected count,
@@ -257,26 +291,6 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         new_cols[f"{col}_momentum"] = (
             data[f"{col}_recent_count_20"].values / max(expected_in_window, 1e-6) - 1.0
         )
-
-    # === 19. Decaying co-occurrence ===
-    # Co-occurrence counts weighted by recency: pairs that appeared together
-    # recently contribute more than pairs from distant draws.
-    cooc_decayed = np.zeros((range_high + 1, range_high + 1))
-    for i in range(n_balls):
-        for j in range(n_balls):
-            if i != j:
-                np.add.at(
-                    cooc_decayed,
-                    (ball_arr[:, i].astype(int), ball_arr[:, j].astype(int)),
-                    decay_weights,
-                )
-    for idx, col in enumerate(ball_cols_main):
-        col_vals = ball_arr[:, idx].astype(int)
-        other_indices = [k for k in range(n_balls) if k != idx]
-        scores = np.zeros(n)
-        for k in other_indices:
-            scores += cooc_decayed[col_vals, ball_arr[:, k].astype(int)]
-        new_cols[f"{col}_decayed_cooccurrence"] = scores
 
     # Batch-assign all new columns in one concat to avoid repeated fragmentation
     data = pd.concat([data, pd.DataFrame(new_cols, index=data.index)], axis=1)

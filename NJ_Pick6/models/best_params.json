@@ -1,0 +1,44 @@
+{
+  "Ball1": {
+    "max_iter": 180,
+    "max_depth": 7,
+    "min_samples_leaf": 36,
+    "learning_rate": 0.010460078953684128,
+    "l2_regularization": 1.469590743235866
+  },
+  "Ball2": {
+    "max_iter": 318,
+    "max_depth": 4,
+    "min_samples_leaf": 30,
+    "learning_rate": 0.006621400326565245,
+    "l2_regularization": 0.9991942106339483
+  },
+  "Ball3": {
+    "max_iter": 212,
+    "max_depth": 9,
+    "min_samples_leaf": 38,
+    "learning_rate": 0.058006322999333615,
+    "l2_regularization": 0.31203728088487304
+  },
+  "Ball4": {
+    "max_iter": 297,
+    "max_depth": 8,
+    "min_samples_leaf": 11,
+    "learning_rate": 0.005031115860942136,
+    "l2_regularization": 0.9102188018921247
+  },
+  "Ball5": {
+    "max_iter": 311,
+    "max_depth": 3,
+    "min_samples_leaf": 5,
+    "learning_rate": 0.005216402495808557,
+    "l2_regularization": 1.1677774642672631
+  },
+  "Ball6": {
+    "max_iter": 212,
+    "max_depth": 9,
+    "min_samples_leaf": 38,
+    "learning_rate": 0.058006322999333615,
+    "l2_regularization": 0.31203728088487304
+  }
+}

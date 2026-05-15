@@ -127,9 +127,21 @@ def _tune_hgbc(x_train, y_train, log, n_trials=50):
     Returns the best parameter dict found.
     """
     from sklearn.ensemble import HistGradientBoostingClassifier
+    from sklearn.metrics import log_loss
     from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    # Pre-compute full label set so the scorer never fails when a CV fold's
+    # test split is missing some classes (common with rare ball values).
+    all_labels = np.sort(np.unique(y_train)).tolist()
+
+    def _nll_scorer(estimator, X, y):
+        try:
+            proba = estimator.predict_proba(X)
+            return -log_loss(y, proba, labels=all_labels)
+        except Exception:
+            return -100.0
 
     def _objective(trial):
         params = {
@@ -143,7 +155,7 @@ def _tune_hgbc(x_train, y_train, log, n_trials=50):
         cv = TimeSeriesSplit(n_splits=3)
         try:
             scores = cross_val_score(model, x_train, y_train, cv=cv,
-                                     scoring="neg_log_loss", n_jobs=1)
+                                     scoring=_nll_scorer, n_jobs=1)
             result = float(np.nanmean(scores))
             return result if not np.isnan(result) else -100.0
         except Exception:

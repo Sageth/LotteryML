@@ -131,7 +131,7 @@ def main():
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy evaluation (overall)")
     parser.add_argument("--accuracy-regimes", action="store_true", help="Run regime-aware accuracy evaluation")
     parser.add_argument("--tune", action="store_true",
-                        help="Run RandomizedSearchCV to tune HGBC hyperparameters before training")
+                        help="Run Optuna TPE search to tune HGBC hyperparameters and sampling params (smoothing, recency_blend, regime temperatures)")
     parser.add_argument("--automerge", action="store_true",
                         help="Automatically commit and merge prediction updates to GitHub")
 

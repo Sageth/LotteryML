@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import random
 from datetime import datetime
+import optuna
 from sklearn.tree import DecisionTreeClassifier as _PruneDT
-from sklearn.model_selection import RandomizedSearchCV
 from sklearn.ensemble import RandomForestClassifier as _MORF
 from sklearn.multioutput import MultiOutputClassifier as _MOC
 import lib.models.builder as builder
@@ -118,37 +118,151 @@ def _calibrate_temperature(model, x_cal, y_cal):
 
 
 # ------------------------------------------------------------
-#  Hyperparameter tuning helper
+#  Hyperparameter tuning helpers
 # ------------------------------------------------------------
-_HGBC_SEARCH_SPACE = {
-    "max_iter": [100, 150, 200, 300],
-    "max_depth": [4, 5, 6, 7, 8],
-    "min_samples_leaf": [10, 15, 20, 30, 40],
-    "learning_rate": [0.01, 0.03, 0.05, 0.1, 0.2],
-    "l2_regularization": [0.0, 0.1, 0.5, 1.0],
-}
-
-
-def _tune_hgbc(x_train, y_train, log, n_iter=20):
+def _tune_hgbc(x_train, y_train, log, n_trials=50):
     """
-    RandomizedSearchCV over HGBC hyperparameters.
+    Optuna TPE search over HGBC hyperparameters.
+    Uses continuous ranges and neg_log_loss for better calibration-aware search.
     Returns the best parameter dict found.
     """
     from sklearn.ensemble import HistGradientBoostingClassifier
-    from sklearn.model_selection import TimeSeriesSplit
-    search = RandomizedSearchCV(
-        HistGradientBoostingClassifier(random_state=42),
-        _HGBC_SEARCH_SPACE,
-        n_iter=n_iter,
-        cv=TimeSeriesSplit(n_splits=3),
-        scoring="accuracy",
-        random_state=42,
-        n_jobs=-1,
-        refit=False,
+    from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    def _objective(trial):
+        params = {
+            "max_iter":          trial.suggest_int("max_iter", 100, 400),
+            "max_depth":         trial.suggest_int("max_depth", 3, 9),
+            "min_samples_leaf":  trial.suggest_int("min_samples_leaf", 5, 50),
+            "learning_rate":     trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
+            "l2_regularization": trial.suggest_float("l2_regularization", 0.0, 2.0),
+        }
+        model = HistGradientBoostingClassifier(random_state=42, **params)
+        cv = TimeSeriesSplit(n_splits=3)
+        try:
+            scores = cross_val_score(model, x_train, y_train, cv=cv,
+                                     scoring="neg_log_loss", n_jobs=1)
+            result = float(np.nanmean(scores))
+            return result if not np.isnan(result) else -100.0
+        except Exception:
+            return -100.0
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=42),
     )
-    search.fit(x_train, y_train)
-    log.info(f"Best HGBC params: {search.best_params_} (score={search.best_score_:.4f})")
-    return search.best_params_
+    study.optimize(_objective, n_trials=n_trials, show_progress_bar=False)
+    log.info(f"Best HGBC params: {study.best_params} (NLL={-study.best_value:.4f})")
+    return study.best_params
+
+
+def _tune_sampling_params(models, x_test, y_test_frame, config, cal_temps_store,
+                          y_train_frame, log, n_trials=40):
+    """
+    Optuna TPE search over sampling parameters: prediction_smoothing, recency_blend,
+    and per-regime temperatures.  Objective is mean NLL across the test set using
+    the already-trained models' predict_proba outputs — pre-computed once for speed.
+    """
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    ball_list = config["game_balls"]
+    ball_cols_main = [f"Ball{b}" for b in ball_list]
+
+    # Pre-compute predict_proba for all test rows and all ball models.
+    ball_probas = {}
+    ball_classes = {}
+    ball_class_to_idx = {}
+    true_indices_per_ball = {}
+
+    for ball in ball_list:
+        model = models[ball]
+        x_aligned = _align_input(model, x_test)
+        ball_probas[ball] = model.predict_proba(x_aligned)          # (n_test, n_classes)
+        ball_classes[ball] = model.classes_
+        ctoi = {int(c): i for i, c in enumerate(model.classes_)}
+        ball_class_to_idx[ball] = ctoi
+        true_indices_per_ball[ball] = np.array(
+            [ctoi.get(int(v), -1) for v in y_test_frame[f"Ball{ball}"].values]
+        )
+
+    # Recency weights from the training portion only (no leakage).
+    y_train_arr = y_train_frame[ball_cols_main].values
+    n_train = len(y_train_frame)
+    recency_weights_train = {}
+    for num in range(config["ball_game_range_low"], config["ball_game_range_high"] + 1):
+        rows_with_num = np.where((y_train_arr == num).any(axis=1))[0]
+        gap = (n_train - 1 - rows_with_num[-1]) if len(rows_with_num) else n_train
+        recency_weights_train[num] = 1.0 / (gap + 1)
+
+    # Pre-compute normalised recency vector per ball (aligned to each model's classes).
+    ball_recency_vecs = {}
+    for ball in ball_list:
+        classes = ball_classes[ball]
+        rec = np.array([recency_weights_train.get(int(c), 0.0) for c in classes])
+        rec_sum = rec.sum()
+        ball_recency_vecs[ball] = rec / rec_sum if rec_sum > 0 else rec
+
+    regimes = x_test["regime"].values.astype(int)
+    n_test = len(x_test)
+
+    def _objective(trial):
+        smoothing     = trial.suggest_float("prediction_smoothing", 0.05, 0.5)
+        recency_blend = trial.suggest_float("recency_blend", 0.0, 0.3)
+        if smoothing + recency_blend > 0.85:
+            raise optuna.exceptions.TrialPruned()
+
+        r0 = trial.suggest_float("regime_temp_0", 0.4, 1.5)
+        r1 = trial.suggest_float("regime_temp_1", 0.7, 2.0)
+        r2 = trial.suggest_float("regime_temp_2", 1.0, 3.0)
+        # Per-row regime temperature: index directly via regime int (0/1/2)
+        rt_lookup = np.array([r0, r1, r2])
+        rt_arr = rt_lookup[np.clip(regimes, 0, 2)]  # (n_test,)
+
+        model_weight = 1.0 - smoothing - recency_blend
+        total_nll = 0.0
+        count = 0
+
+        for ball in ball_list:
+            probas   = ball_probas[ball]                       # (n_test, n_classes)
+            n_cls    = probas.shape[1]
+            true_idx = true_indices_per_ball[ball]             # (n_test,)
+            rec_vec  = ball_recency_vecs[ball]                 # (n_classes,)
+            cal_temp = cal_temps_store.get(f"Ball{ball}", 1.0)
+            temps    = cal_temp * (rt_arr / 1.2)               # (n_test,)
+
+            uniform  = np.ones(n_cls) / n_cls
+            blended  = (model_weight * probas
+                        + smoothing * uniform
+                        + recency_blend * rec_vec)             # (n_test, n_classes)
+
+            # Temperature scaling: each row gets its own exponent.
+            inv_temp = (1.0 / np.maximum(temps, 1e-6))[:, np.newaxis]
+            scaled   = np.power(np.clip(blended, 1e-12, None), inv_temp)
+            scaled  /= scaled.sum(axis=1, keepdims=True)
+
+            valid    = true_idx >= 0
+            if valid.any():
+                sel_probs  = scaled[valid, true_idx[valid]]
+                total_nll += float(-np.log(sel_probs + 1e-12).sum())
+                count      += int(valid.sum())
+
+        return -(total_nll / count) if count > 0 else float("-inf")
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=42),
+    )
+    study.optimize(_objective, n_trials=n_trials, show_progress_bar=False)
+    best = study.best_params
+    log.info(
+        f"Best sampling params: smoothing={best['prediction_smoothing']:.3f}, "
+        f"recency_blend={best['recency_blend']:.3f}, "
+        f"regime_temps=[{best['regime_temp_0']:.2f}, {best['regime_temp_1']:.2f}, {best['regime_temp_2']:.2f}] "
+        f"(NLL={-study.best_value:.4f})"
+    )
+    return best
 
 
 # ------------------------------------------------------------
@@ -221,14 +335,36 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     models = {}
     test_scores = {}
 
+    models_dir = os.path.join(gamedir, config["model_save_path"])
+    os.makedirs(models_dir, exist_ok=True)
+
     # Load or initialise persisted best HGBC params (keyed by ball name)
-    params_path = os.path.join(gamedir, config["model_save_path"], "best_params.json")
-    os.makedirs(os.path.dirname(params_path), exist_ok=True)
+    params_path = os.path.join(models_dir, "best_params.json")
     if os.path.exists(params_path):
         with open(params_path) as _f:
             best_params_store = json.load(_f)
     else:
         best_params_store = {}
+
+    # Load previously tuned sampling params and apply to config (overrides defaults).
+    sampling_params_path = os.path.join(models_dir, "sampling_params.json")
+    if os.path.exists(sampling_params_path):
+        with open(sampling_params_path) as _f:
+            saved_sp = json.load(_f)
+        config["prediction_smoothing"] = saved_sp.get("prediction_smoothing",
+                                                       config.get("prediction_smoothing", 0.3))
+        config["recency_blend"]        = saved_sp.get("recency_blend",
+                                                       config.get("recency_blend", 0.2))
+        if all(k in saved_sp for k in ("regime_temp_0", "regime_temp_1", "regime_temp_2")):
+            config["regime_temperatures"] = {
+                0: saved_sp["regime_temp_0"],
+                1: saved_sp["regime_temp_1"],
+                2: saved_sp["regime_temp_2"],
+            }
+        log.info(
+            f"Loaded sampling params: smoothing={config['prediction_smoothing']:.3f}, "
+            f"recency_blend={config['recency_blend']:.3f}"
+        )
 
     # --- Multi-output stacking: train on all balls at once, inject predictions as features ---
     mo_model_path = os.path.join(gamedir, config["model_save_path"], "MultiOutput.joblib")
@@ -341,6 +477,24 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     with open(cal_temps_path, "w") as _f:
         json.dump(cal_temps_store, _f, indent=2)
     models["calibrated_temps"] = cal_temps_store
+
+    # Tune sampling parameters (smoothing, recency_blend, regime temperatures) via
+    # Optuna NLL minimisation on the test set using pre-trained models.
+    if tune:
+        log.info("Tuning sampling parameters (smoothing, recency_blend, regime temperatures)...")
+        best_sp = _tune_sampling_params(
+            models, x_test, y_test_frame, config, cal_temps_store, y_train_frame, log
+        )
+        config["prediction_smoothing"]  = best_sp["prediction_smoothing"]
+        config["recency_blend"]         = best_sp["recency_blend"]
+        config["regime_temperatures"]   = {
+            0: best_sp["regime_temp_0"],
+            1: best_sp["regime_temp_1"],
+            2: best_sp["regime_temp_2"],
+        }
+        with open(sampling_params_path, "w") as _f:
+            json.dump(best_sp, _f, indent=2)
+        log.info(f"Saved sampling params to {sampling_params_path}")
 
     # --- Extra ball ---
     if config.get("game_has_extra", False):

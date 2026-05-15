@@ -2,7 +2,6 @@
 **/.idea/
 **/.DS_Store
 **/*.joblib
-**/calibrated_temps.json
 **/__pycache__/
 **/htmlcov/
 **/.coverage

@@ -16,6 +16,7 @@ gitpython = "*"
 pygithub = "*"
 python-dotenv = "*"
 pytest = "*"
+optuna = "*"
 
 [dev-packages]
 

@@ -490,6 +490,93 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
         json.dump(cal_temps_store, _f, indent=2)
     models["calibrated_temps"] = cal_temps_store
 
+    # --- Pooled ball model (position-pooling experiment) ---
+    # Build a single model trained on all ball positions pooled together.
+    # Each training row is (draw_features + ball_position) → ball_value.
+    # This eliminates the sorting artifact where Ball1/Ball6 appear easier to
+    # predict simply because their range is constrained by sort order.
+    if config.get("use_pooled", False):
+        pooled_model_path = os.path.join(gamedir, config["model_save_path"], "PooledBall.joblib")
+        if os.path.exists(pooled_model_path) and not force_retrain:
+            pooled_model = joblib.load(pooled_model_path)
+            log.info(f"Loaded existing pooled model: {pooled_model_path}")
+        else:
+            log.info("Building pooled position training set...")
+            pool_rows = []
+            pool_targets = []
+            n_balls = len(config["game_balls"])
+
+            # Use the fit portion (before calibration split) to build the pooled set.
+            # We re-use x_train (which already has mo_pred features injected).
+            # cal_idx was set per-ball above; recompute from x_train length.
+            pool_cal_idx = int(len(x_train) * (1 - cal_ratio))
+            x_fit_pool = x_train.iloc[:pool_cal_idx].copy()
+            x_cal_pool = x_train.iloc[pool_cal_idx:].copy()
+
+            for pos_idx, ball_k in enumerate(config["game_balls"]):
+                # Copy features for this position and append ball_position indicator
+                x_pos = x_fit_pool.copy()
+                x_pos["ball_position"] = pos_idx
+                pool_rows.append(x_pos)
+                pool_targets.append(y_train_frame.iloc[:pool_cal_idx][f"Ball{ball_k}"].values)
+
+            x_pooled = pd.concat(pool_rows, ignore_index=True)
+            y_pooled = pd.Series(np.concatenate(pool_targets), name="ball_value")
+            y_pooled = y_pooled.astype(int)
+
+            log.info(f"Pooled training set: {len(x_pooled)} rows "
+                     f"({len(x_fit_pool)} draws × {n_balls} positions), "
+                     f"{x_pooled['ball_position'].nunique()} unique positions")
+
+            # Train pooled model (no pruning — ball_position is a key feature)
+            min_class_count_pool = int(y_pooled.value_counts().min())
+            calibration_cv_pool = min(2, min_class_count_pool) if min_class_count_pool >= 2 else None
+            pooled_model = builder.build_model(calibration_cv=calibration_cv_pool)
+            pooled_model.fit(x_pooled, y_pooled)
+
+            # Calibrate pooled model temperature on the cal split
+            x_cal_pool_pos_rows = []
+            y_cal_pool_vals = []
+            for pos_idx, ball_k in enumerate(config["game_balls"]):
+                x_p = x_cal_pool.copy()
+                x_p["ball_position"] = pos_idx
+                x_cal_pool_pos_rows.append(x_p)
+                y_cal_pool_vals.append(y_train_frame.iloc[pool_cal_idx:][f"Ball{ball_k}"].values)
+            x_cal_pooled = pd.concat(x_cal_pool_pos_rows, ignore_index=True)
+            y_cal_pooled = pd.Series(np.concatenate(y_cal_pool_vals), name="ball_value").astype(int)
+
+            pooled_temp = _calibrate_temperature(
+                pooled_model,
+                _align_input(pooled_model, x_cal_pooled),
+                y_cal_pooled
+            )
+            cal_temps_store["PooledBall"] = pooled_temp
+            log.info(f"PooledBall: calibrated temperature = {pooled_temp:.3f}")
+            with open(cal_temps_path, "w") as _f:
+                json.dump(cal_temps_store, _f, indent=2)
+            models["calibrated_temps"] = cal_temps_store
+
+            joblib.dump(pooled_model, pooled_model_path)
+            log.info(f"Trained and saved pooled model: {pooled_model_path}")
+
+            # Evaluate on test set (all positions pooled)
+            x_test_pool_rows = []
+            y_test_pool_vals = []
+            for pos_idx, ball_k in enumerate(config["game_balls"]):
+                x_p = x_test.copy()
+                x_p["ball_position"] = pos_idx
+                x_test_pool_rows.append(x_p)
+                y_test_pool_vals.append(y_test_frame[f"Ball{ball_k}"].values)
+            x_test_pooled = pd.concat(x_test_pool_rows, ignore_index=True)
+            y_test_pooled = pd.Series(np.concatenate(y_test_pool_vals)).astype(int)
+            pooled_test_score = pooled_model.score(
+                _align_input(pooled_model, x_test_pooled), y_test_pooled
+            )
+            test_scores["pooled"] = pooled_test_score
+            log.info(f"PooledBall test accuracy (all positions): {pooled_test_score:.4f}")
+
+        models["pooled"] = pooled_model
+
     # Tune sampling parameters (smoothing, recency_blend, regime temperatures) via
     # Optuna NLL minimisation on the test set using pre-trained models.
     if tune:
@@ -646,26 +733,97 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             valid = True
 
-            # Predict main balls
-            for ball in config["game_balls"]:
-                model  = models[ball]
-                # Blend calibrated temperature with regime signal:
-                # cal_temp is the statistically correct base; regime scales it.
-                cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
-                temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
-                input_vec  = _align_input(model, input_vector)
+            # Predict main balls — use pooled model if available, else per-ball fallback
+            use_pooled = config.get("use_pooled", False) and "pooled" in models
+            if use_pooled:
+                # Pooled model: query once per ball position, collect full-range probas,
+                # then sample without replacement to ensure unique balls.
+                pooled_model = models["pooled"]
+                cal_temp = cal_temps.get("PooledBall", regime_temp)
+                temperature = cal_temp * (regime_temp / 1.2)
 
-                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
-                                               recency_weights, recency_blend)
+                # Collect per-position probability vectors over the full number range
+                all_pos_probas = []   # list of (classes_array, scaled_proba_array)
+                for pos_idx in range(num_main):
+                    iv_pos = input_vector.copy()
+                    iv_pos["ball_position"] = pos_idx
+                    iv_aligned = _align_input(pooled_model, iv_pos)
+                    proba = pooled_model.predict_proba(iv_aligned)[0]
+                    classes = pooled_model.classes_
 
-                # Duplicate check
-                if no_duplicates and pred in used_numbers:
-                    valid = False
-                    break
+                    # Apply smoothing + recency blend (same as _sample_from_proba)
+                    model_weight = 1.0 - smoothing - recency_blend
+                    uniform = np.ones(len(classes)) / len(classes)
+                    proba = model_weight * proba + smoothing * uniform
+                    if recency_blend > 0.0 and recency_weights:
+                        rec = np.array([recency_weights.get(int(c), 0.0) for c in classes])
+                        rec_sum = rec.sum()
+                        if rec_sum > 0:
+                            rec /= rec_sum
+                            proba = proba + recency_blend * rec
 
-                used_numbers.add(pred)
-                predictions.append(pred)
-                confidences.append(conf)
+                    # Temperature scaling
+                    scaled = np.power(np.clip(proba, 1e-12, None), 1.0 / max(temperature, 1e-6))
+                    scaled /= scaled.sum()
+                    all_pos_probas.append((classes, scaled))
+
+                # Sample without replacement: greedily pick highest-probability
+                # un-used number for each position.
+                # Strategy: sum probabilities across positions, then sample sequentially,
+                # zeroing out chosen numbers.
+                n_classes = len(all_pos_probas[0][0])
+                classes_arr = all_pos_probas[0][0]  # shared class set
+
+                # Build combined probability matrix: shape (n_positions, n_classes)
+                prob_matrix = np.stack([p for _, p in all_pos_probas], axis=0)
+
+                # Sample sequentially per position using its own probability vector,
+                # but mask out already-used numbers.
+                available_mask = np.ones(n_classes, dtype=bool)
+                for pos_idx in range(num_main):
+                    pos_proba = prob_matrix[pos_idx].copy()
+                    pos_proba[~available_mask] = 0.0
+                    avail_count = int(available_mask.sum())
+                    if avail_count == 0:
+                        # No available classes left — retry this attempt
+                        valid = False
+                        break
+                    if pos_proba.sum() < 1e-12:
+                        # Fallback: uniform over available numbers
+                        pos_proba = np.zeros(n_classes)
+                        pos_proba[available_mask] = 1.0 / avail_count
+                    else:
+                        pos_proba /= pos_proba.sum()
+
+                    chosen_idx = np.random.choice(n_classes, p=pos_proba)
+                    pred = int(classes_arr[chosen_idx])
+                    conf = float(pos_proba[chosen_idx])
+
+                    if no_duplicates:
+                        available_mask[chosen_idx] = False
+
+                    predictions.append(pred)
+                    confidences.append(conf)
+            else:
+                for ball in config["game_balls"]:
+                    model  = models[ball]
+                    # Blend calibrated temperature with regime signal:
+                    # cal_temp is the statistically correct base; regime scales it.
+                    cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
+                    temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
+                    input_vec  = _align_input(model, input_vector)
+
+                    pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
+                                                   recency_weights, recency_blend)
+
+                    # Duplicate check
+                    if no_duplicates and pred in used_numbers:
+                        valid = False
+                        break
+
+                    used_numbers.add(pred)
+                    predictions.append(pred)
+                    confidences.append(conf)
 
             if not valid:
                 continue

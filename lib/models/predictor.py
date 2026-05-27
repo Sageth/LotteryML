@@ -9,7 +9,7 @@ import random
 from datetime import datetime
 import optuna
 from sklearn.tree import DecisionTreeClassifier as _PruneDT
-from sklearn.ensemble import RandomForestClassifier as _MORF
+from sklearn.ensemble import RandomForestClassifier as _MORF, RandomForestClassifier as _PerNumRF
 from sklearn.multioutput import MultiOutputClassifier as _MOC
 import lib.models.builder as builder
 
@@ -278,6 +278,44 @@ def _tune_sampling_params(models, x_test, y_test_frame, config, cal_temps_store,
 
 
 # ------------------------------------------------------------
+#  Per-number model helpers
+# ------------------------------------------------------------
+def _train_single_number_model(args):
+    """
+    Train a binary RF classifier for one number: did this number appear in the draw?
+    Used with joblib.Parallel for parallel training.
+
+    args: (n, x_train_values, x_train_columns, y_bin_values, model_path)
+    Returns: (n, model_path) after saving the model.
+    """
+    n, x_values, x_columns, y_values, model_path = args
+    x = pd.DataFrame(x_values, columns=x_columns)
+    y = pd.Series(y_values)
+    model = _PerNumRF(
+        n_estimators=100,
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=1,   # single thread per model; outer Parallel controls parallelism
+    )
+    model.fit(x, y)
+    joblib.dump(model, model_path)
+    return n, model_path
+
+
+def _load_per_number_models(models_dir, range_low, range_high):
+    """
+    Load Num_N.joblib models from models_dir.
+    Returns dict {n: model} for all n in [range_low, range_high] that exist on disk.
+    """
+    loaded = {}
+    for n in range(range_low, range_high + 1):
+        path = os.path.join(models_dir, f"Num_{n}.joblib")
+        if os.path.exists(path):
+            loaded[n] = joblib.load(path)
+    return loaded
+
+
+# ------------------------------------------------------------
 #  Statistics preparation
 # ------------------------------------------------------------
 def prepare_statistics(data: pd.DataFrame, config: dict, log):
@@ -402,6 +440,55 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     # is held out to calibrate each model's temperature post-hoc.  Must be
     # chronologically AFTER the fit data to prevent any leakage.
     cal_ratio = config.get("calibration_ratio", 0.15)
+
+    # --- Per-number models (experimental) ---
+    # When use_per_number is True, train one binary classifier per number in the
+    # game range.  These replace the per-ball positional models at prediction time.
+    # Per-ball models are still trained (and the Num_* models saved alongside) so
+    # the pipeline stays backward-compatible.
+    if config.get("use_per_number", False):
+        range_low  = config["ball_game_range_low"]
+        range_high = config["ball_game_range_high"]
+        ball_cols_main = [f"Ball{b}" for b in config["game_balls"]]
+
+        # Check if all per-number models already exist on disk
+        per_num_model_dir = os.path.join(gamedir, config["model_save_path"])
+        all_exist = all(
+            os.path.exists(os.path.join(per_num_model_dir, f"Num_{n}.joblib"))
+            for n in range(range_low, range_high + 1)
+        )
+
+        if all_exist and not force_retrain:
+            log.info("Loading existing per-number models...")
+            per_num_models = _load_per_number_models(per_num_model_dir, range_low, range_high)
+        else:
+            log.info(
+                f"Training {range_high - range_low + 1} per-number binary classifiers "
+                f"(numbers {range_low}–{range_high}) in parallel..."
+            )
+            # Cache x_train array/columns once — avoids repeated copies per worker.
+            x_train_values  = x_train.values
+            x_train_columns = list(x_train.columns)
+
+            # Build argument list: each worker gets (n, x_values, x_columns, y_binary, path)
+            train_args = []
+            for n in range(range_low, range_high + 1):
+                # Binary target: 1 if number n appeared in any ball column, else 0
+                y_bin = (y_train_frame[ball_cols_main] == n).any(axis=1).astype(int).values
+                model_path = os.path.join(per_num_model_dir, f"Num_{n}.joblib")
+                train_args.append((n, x_train_values, x_train_columns, y_bin, model_path))
+
+            results = joblib.Parallel(n_jobs=-1, verbose=0)(
+                joblib.delayed(_train_single_number_model)(args) for args in train_args
+            )
+            per_num_models = {}
+            for n, model_path in results:
+                per_num_models[n] = joblib.load(model_path)
+
+            log.info(f"Per-number models trained and saved: {len(per_num_models)} models")
+
+        models["per_number"] = per_num_models
+        log.info(f"Per-number models loaded: {len(per_num_models)}")
 
     # Load or initialise per-ball calibrated temperatures
     cal_temps_path = os.path.join(gamedir, config["model_save_path"], "calibrated_temps.json")
@@ -578,6 +665,52 @@ def _temperature_for_regime(regime, config):
 
 
 # ------------------------------------------------------------
+#  Per-number prediction: get P(n appears) for each number, sample k without replacement
+# ------------------------------------------------------------
+def _sample_per_number(per_num_models, input_vector, num_to_draw, temperature=1.0,
+                       smoothing=0.0, recency_weights=None, recency_blend=0.0):
+    """
+    For each number n, call model.predict_proba(input)[:,1] to get P(n appears).
+    Apply temperature scaling + uniform smoothing + recency blend.
+    Softmax-normalize across all numbers, then sample num_to_draw without replacement.
+
+    Returns: (list of drawn numbers, list of probabilities for each drawn number)
+    """
+    numbers = sorted(per_num_models.keys())
+    raw_probs = np.array([
+        per_num_models[n].predict_proba(input_vector)[0, 1]
+        for n in numbers
+    ])
+
+    model_weight = 1.0 - smoothing - recency_blend
+    n_total = len(numbers)
+
+    # Uniform mixture
+    probs = model_weight * raw_probs
+    if smoothing > 0.0:
+        probs = probs + smoothing * (np.ones(n_total) / n_total)
+
+    # Recency mixture
+    if recency_blend > 0.0 and recency_weights:
+        rec = np.array([recency_weights.get(n, 0.0) for n in numbers])
+        rec_sum = rec.sum()
+        if rec_sum > 0:
+            rec = rec / rec_sum
+            probs = probs + recency_blend * rec
+
+    # Temperature scaling (softmax-style)
+    scaled = np.power(np.clip(probs, 1e-12, None), 1.0 / max(temperature, 1e-6))
+    scaled /= scaled.sum()
+
+    # Sample num_to_draw numbers without replacement
+    chosen_indices = np.random.choice(n_total, size=num_to_draw, replace=False, p=scaled)
+    chosen_numbers = [numbers[i] for i in chosen_indices]
+    chosen_probs   = [float(scaled[i]) for i in chosen_indices]
+
+    return chosen_numbers, chosen_probs
+
+
+# ------------------------------------------------------------
 #  Prediction generation
 # ------------------------------------------------------------
 def generate_predictions(data, config, models, stats, log, test_scores=None, test_mode=False):
@@ -605,6 +738,9 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     stat_std = stats["std"]
     stat_mode = stats["mode"]
 
+    # Whether to use per-number models (falls back to per-ball if not present in models)
+    use_per_number = config.get("use_per_number", False) and "per_number" in models
+
     # Global recency weights: 1/(draws_since_last_seen + 1) across all positions.
     # Mirrors the winning recency_weighted baseline from accuracy evaluation.
     ball_cols = [f"Ball{b}" for b in config["game_balls"]]
@@ -615,6 +751,9 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
         last_idx = mask[::-1].idxmax() if mask.any() else -1
         gap = (n_rows - 1 - last_idx) if mask.any() else n_rows
         recency_weights[num] = 1.0 / (gap + 1)
+
+    if use_per_number:
+        log.info("Using per-number probability models for prediction.")
 
     while runs_completed < max_runs:
         retries = 0
@@ -646,31 +785,52 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             valid = True
 
-            # Predict main balls
-            for ball in config["game_balls"]:
-                model  = models[ball]
-                # Blend calibrated temperature with regime signal:
-                # cal_temp is the statistically correct base; regime scales it.
-                cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
-                temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
-                input_vec  = _align_input(model, input_vector)
+            if use_per_number:
+                # Per-number mode: get P(n appears) for every number, sample k without replacement.
+                # Temperature uses regime_temp only (no per-ball calibrated temps — these models
+                # are position-free, so a single regime-based temperature applies to all).
+                temperature = regime_temp
+                pn_input = input_vector.copy()
+                # Align to first model's features (all per-number models share the same feature set)
+                first_model = next(iter(models["per_number"].values()))
+                pn_input = _align_input(first_model, pn_input)
 
-                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
-                                               recency_weights, recency_blend)
-
-                # Duplicate check
-                if no_duplicates and pred in used_numbers:
+                try:
+                    predictions, confidences = _sample_per_number(
+                        models["per_number"], pn_input, num_main, temperature,
+                        smoothing, recency_weights, recency_blend
+                    )
+                except Exception:
                     valid = False
-                    break
 
-                used_numbers.add(pred)
-                predictions.append(pred)
-                confidences.append(conf)
+                # Per-number always produces unique numbers (sampled without replacement)
+                # so no duplicate check needed.
+            else:
+                # Per-ball positional mode (original approach)
+                for ball in config["game_balls"]:
+                    model  = models[ball]
+                    # Blend calibrated temperature with regime signal:
+                    # cal_temp is the statistically correct base; regime scales it.
+                    cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
+                    temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
+                    input_vec  = _align_input(model, input_vector)
+
+                    pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
+                                                   recency_weights, recency_blend)
+
+                    # Duplicate check
+                    if no_duplicates and pred in used_numbers:
+                        valid = False
+                        break
+
+                    used_numbers.add(pred)
+                    predictions.append(pred)
+                    confidences.append(conf)
 
             if not valid:
                 continue
 
-            # Extra ball
+            # Extra ball (always uses per-ball positional model regardless of use_per_number)
             if game_has_extra:
                 model    = models["extra"]
                 cal_temp = cal_temps.get("extra", regime_temp)

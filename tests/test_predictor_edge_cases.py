@@ -200,6 +200,10 @@ def test_generate_predictions_missing_feature():
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
+    # Disable per-number mode: this test exercises per-ball predict_proba error handling.
+    # Per-number models use _PerNumRF directly (not builder.build_model), so they always
+    # have predict_proba and would suppress the error this test is checking for.
+    config["use_per_number"] = False
     force_retrain = True
 
     if os.path.exists(config["model_save_path"]):
@@ -446,6 +450,8 @@ def test_generate_predictions_missing_columns_error():
 
     config["test_prediction_runs"] = 1
     config["accuracy_allowance"] = -1.0
+    # Disable per-number mode: this test exercises per-ball predict_proba error handling.
+    config["use_per_number"] = False
     force_retrain = True
 
     data = engineer_features(data, config, log)

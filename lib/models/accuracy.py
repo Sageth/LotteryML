@@ -201,7 +201,11 @@ def evaluate_model_accuracy(gamedir, log):
     from lib.config.loader import load_config, evaluate_config
     from lib.data.features import engineer_features
     from lib.data.normalize import normalize_features
-    from lib.models.predictor import prepare_statistics, build_models, _sample_from_proba, _align_input
+    from lib.models.predictor import (
+        prepare_statistics, build_models,
+        _sample_from_proba, _align_input,
+        _sample_per_number, _temperature_for_regime,
+    )
 
     log.info("Running enhanced regime-aware accuracy evaluation...")
 
@@ -257,10 +261,24 @@ def evaluate_model_accuracy(gamedir, log):
 
         # Model prediction
         predicted = []
-        for ball in config["game_balls"]:
-            x_ball = _align_input(models[ball], x_row)
-            pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
-            predicted.append(pred)
+        if config.get("use_per_number", False) and "per_number" in models:
+            # Per-number mode: get P(n appears) for each number, sample k without replacement
+            regime_temp = _temperature_for_regime(regime, config)
+            pn_models = models["per_number"]
+            first_model = next(iter(pn_models.values()))
+            pn_input = _align_input(first_model, x_row)
+            try:
+                predicted, _ = _sample_per_number(
+                    pn_models, pn_input, len(config["game_balls"]),
+                    temperature=regime_temp
+                )
+            except Exception:
+                predicted = []
+        else:
+            for ball in config["game_balls"]:
+                x_ball = _align_input(models[ball], x_row)
+                pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
+                predicted.append(pred)
 
         if config.get("game_has_extra", False):
             x_extra = _align_input(models["extra"], x_row)

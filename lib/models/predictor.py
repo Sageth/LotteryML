@@ -10,7 +10,7 @@ from datetime import datetime
 import optuna
 from sklearn.tree import DecisionTreeClassifier as _PruneDT
 from sklearn.ensemble import RandomForestClassifier as _MORF
-from sklearn.multioutput import MultiOutputClassifier as _MOC
+from sklearn.multioutput import MultiOutputClassifier as _MOC, MultiOutputClassifier as _MultiLabelMOC
 import lib.models.builder as builder
 
 
@@ -398,6 +398,51 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     models["multi_output"] = mo_model
 
+    # --- Multi-label model: predicts which numbers appear in each draw ---
+    # Only trained for games without an extra ball (the extra ball is outside
+    # the main range and continues to use per-ball models).
+    # The multi-label approach avoids positional sorting bias: instead of
+    # learning "low numbers go in position 1", it learns "which numbers tend
+    # to appear together as a set."
+    use_multi_label = config.get("use_multi_label", False)
+    ml_model_path = os.path.join(gamedir, config["model_save_path"], "MultiLabel.joblib")
+
+    if use_multi_label:
+        range_low  = config["ball_game_range_low"]
+        range_high = config["ball_game_range_high"]
+        range_size = range_high - range_low + 1
+        ball_cols_main = [f"Ball{b}" for b in config["game_balls"]]
+
+        # Build binary target matrix: (n_draws, range_size)
+        # y_ml[i, j] = 1 if number (range_low + j) was drawn in draw i
+        def _make_ml_targets(y_frame):
+            ys = y_frame[ball_cols_main].values  # (n, n_balls)
+            out = np.zeros((len(ys), range_size), dtype=int)
+            for row_idx, row in enumerate(ys):
+                for val in row:
+                    col_idx = int(val) - range_low
+                    if 0 <= col_idx < range_size:
+                        out[row_idx, col_idx] = 1
+            return out
+
+        y_ml_train = _make_ml_targets(y_train_frame)
+
+        if os.path.exists(ml_model_path) and not force_retrain:
+            ml_model = joblib.load(ml_model_path)
+            log.info(f"Loaded existing multi-label model: {ml_model_path}")
+        else:
+            ml_model = _MultiLabelMOC(
+                _MORF(n_estimators=200, class_weight="balanced", random_state=42, n_jobs=-1)
+            )
+            ml_model.fit(x_train, y_ml_train)
+            joblib.dump(ml_model, ml_model_path)
+            log.info(f"Trained and saved multi-label model: {ml_model_path}")
+
+        models["multi_label"] = ml_model
+        models["multi_label_range_low"] = range_low
+        models["multi_label_range_high"] = range_high
+        log.info(f"Multi-label model covers numbers {range_low}–{range_high} (size={range_size})")
+
     # Temperature-scaling calibration: most recent cal_ratio of training data
     # is held out to calibrate each model's temperature post-hoc.  Must be
     # chronologically AFTER the fit data to prevent any leakage.
@@ -616,6 +661,9 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
         gap = (n_rows - 1 - last_idx) if mask.any() else n_rows
         recency_weights[num] = 1.0 / (gap + 1)
 
+    # Check whether a multi-label model is available for position-free prediction
+    use_multi_label_inference = "multi_label" in models
+
     while runs_completed < max_runs:
         retries = 0
 
@@ -646,26 +694,103 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             valid = True
 
-            # Predict main balls
-            for ball in config["game_balls"]:
-                model  = models[ball]
-                # Blend calibrated temperature with regime signal:
-                # cal_temp is the statistically correct base; regime scales it.
-                cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
-                temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
-                input_vec  = _align_input(model, input_vector)
+            if use_multi_label_inference:
+                # --- Multi-label inference path ---
+                # Get P(number appears) for every number in the range.
+                ml_model = models["multi_label"]
+                range_low  = models["multi_label_range_low"]
+                range_high = models["multi_label_range_high"]
+                # Strict feature check: raise if any training features are missing
+                # from the input (same contract as the per-ball path).
+                if hasattr(ml_model, "feature_names_in_"):
+                    missing = [f for f in ml_model.feature_names_in_
+                               if f not in input_vector.columns]
+                    if missing:
+                        raise ValueError(
+                            f"MultiLabel model requires features missing from input: {missing}"
+                        )
+                ml_input = _align_input(ml_model, input_vector)
 
-                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
-                                               recency_weights, recency_blend)
+                # MultiOutputClassifier.predict_proba returns a list of
+                # (n_samples, 2) arrays — one per output (number in range).
+                # Index [:, 1] gives P(this number is drawn).
+                proba_list = ml_model.predict_proba(ml_input)  # list of (1, 2) arrays
+                appear_probs = np.array([arr[0, 1] for arr in proba_list])  # (range_size,)
 
-                # Duplicate check
-                if no_duplicates and pred in used_numbers:
+                # Apply temperature scaling using regime-based temperature.
+                # Use the mean calibrated temperature across balls as a base.
+                cal_temp_mean = float(np.mean([
+                    cal_temps.get(f"Ball{b}", regime_temp) for b in config["game_balls"]
+                ]))
+                temperature = cal_temp_mean * (regime_temp / 1.2)
+
+                # Uniform smoothing + recency blend (same as per-ball path)
+                range_size = range_high - range_low + 1
+                model_weight = 1.0 - smoothing - recency_blend
+                uniform = np.ones(range_size) / range_size
+
+                # Recency vector aligned to the number range
+                rec = np.array([
+                    recency_weights.get(num, 0.0)
+                    for num in range(range_low, range_high + 1)
+                ])
+                rec_sum = rec.sum()
+                if rec_sum > 0:
+                    rec /= rec_sum
+
+                blended = (model_weight * appear_probs
+                           + smoothing * uniform
+                           + recency_blend * rec)
+
+                # Temperature scaling
+                scaled = np.power(np.clip(blended, 1e-12, None), 1.0 / max(temperature, 1e-6))
+                scaled /= scaled.sum()
+
+                # Sample exactly num_main numbers without replacement
+                all_numbers = np.arange(range_low, range_high + 1)
+                try:
+                    chosen_indices = np.random.choice(
+                        range_size, size=num_main, replace=False, p=scaled
+                    )
+                except ValueError:
+                    # Numerical issue — retry
                     valid = False
-                    break
+                    continue
 
-                used_numbers.add(pred)
-                predictions.append(pred)
-                confidences.append(conf)
+                for idx in chosen_indices:
+                    num = int(all_numbers[idx])
+                    conf = float(scaled[idx])
+                    if conf < min_confidence:
+                        valid = False
+                        break
+                    predictions.append(num)
+                    confidences.append(conf)
+
+                if not valid:
+                    continue
+
+            else:
+                # --- Per-ball inference path (original approach) ---
+                # Predict main balls
+                for ball in config["game_balls"]:
+                    model  = models[ball]
+                    # Blend calibrated temperature with regime signal:
+                    # cal_temp is the statistically correct base; regime scales it.
+                    cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
+                    temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
+                    input_vec  = _align_input(model, input_vector)
+
+                    pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
+                                                   recency_weights, recency_blend)
+
+                    # Duplicate check
+                    if no_duplicates and pred in used_numbers:
+                        valid = False
+                        break
+
+                    used_numbers.add(pred)
+                    predictions.append(pred)
+                    confidences.append(conf)
 
             if not valid:
                 continue

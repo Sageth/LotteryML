@@ -257,10 +257,25 @@ def evaluate_model_accuracy(gamedir, log):
 
         # Model prediction
         predicted = []
-        for ball in config["game_balls"]:
-            x_ball = _align_input(models[ball], x_row)
-            pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
-            predicted.append(pred)
+        if "multi_label" in models:
+            # Multi-label path: sample from per-number appearance probabilities
+            ml_model   = models["multi_label"]
+            range_low  = models["multi_label_range_low"]
+            range_high = models["multi_label_range_high"]
+            range_size = range_high - range_low + 1
+            ml_input = _align_input(ml_model, x_row)
+            proba_list   = ml_model.predict_proba(ml_input)  # list of (1, 2)
+            appear_probs = np.array([arr[0, 1] for arr in proba_list])
+            scaled = np.power(np.clip(appear_probs, 1e-12, None), 1.0)
+            scaled /= scaled.sum()
+            num_main = len(config["game_balls"])
+            chosen = np.random.choice(range_size, size=num_main, replace=False, p=scaled)
+            predicted = [int(range_low + i) for i in chosen]
+        else:
+            for ball in config["game_balls"]:
+                x_ball = _align_input(models[ball], x_row)
+                pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
+                predicted.append(pred)
 
         if config.get("game_has_extra", False):
             x_extra = _align_input(models["extra"], x_row)

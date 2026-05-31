@@ -119,12 +119,14 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
 
     if entropy_windows:
         if low_thr is None or high_thr is None:
-            # Global percentiles of primary entropy across all rows — gives
-            # ~33% of draws in each regime.  The previous per-row percentile
-            # approach (axis=1 across only 3 windows) caused the middle
-            # window to almost always land in regime 1.
-            low_thr_val = np.percentile(entropy_main, 33)
-            high_thr_val = np.percentile(entropy_main, 66)
+            # Percentiles computed on the training portion only to avoid
+            # look-ahead bias: test-set rows must not influence the thresholds
+            # used to classify them. Uses the same train_ratio as predictor.py.
+            train_ratio = config.get("train_ratio", 0.8)
+            train_n = max(1, int(n * train_ratio))
+            train_entropy = entropy_main[:train_n]
+            low_thr_val = np.percentile(train_entropy, 33)
+            high_thr_val = np.percentile(train_entropy, 66)
         else:
             low_thr_val = low_thr
             high_thr_val = high_thr

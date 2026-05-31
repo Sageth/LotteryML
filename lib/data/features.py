@@ -119,24 +119,35 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
 
     if entropy_windows:
         if low_thr is None or high_thr is None:
-            # Percentiles computed on the training portion only to avoid
-            # look-ahead bias: test-set rows must not influence the thresholds
-            # used to classify them. Uses the same train_ratio as predictor.py.
+            # Rolling percentile thresholds: for row i, the regime is determined
+            # by where entropy[i] sits within the preceding regime_window draws.
+            # shift(1) makes it causal — row i does not influence its own threshold.
+            # This adapts to long-run entropy drift (e.g. from game range expansions)
+            # while remaining fully leak-free.
+            regime_window = config.get("regime_window", 200)
+            entropy_series = pd.Series(entropy_main)
+            shifted = entropy_series.shift(1)
+            lo_rolling = shifted.rolling(regime_window, min_periods=10).quantile(0.33)
+            hi_rolling = shifted.rolling(regime_window, min_periods=10).quantile(0.66)
+
+            # Fall back to train-split percentiles for early rows that lack
+            # sufficient rolling history (fewer than min_periods draws).
             train_ratio = config.get("train_ratio", 0.8)
             train_n = max(1, int(n * train_ratio))
-            train_entropy = entropy_main[:train_n]
-            low_thr_val = np.percentile(train_entropy, 33)
-            high_thr_val = np.percentile(train_entropy, 66)
+            fallback_lo = np.percentile(entropy_main[:train_n], 33)
+            fallback_hi = np.percentile(entropy_main[:train_n], 66)
+            lo_vals = lo_rolling.fillna(fallback_lo).values
+            hi_vals = hi_rolling.fillna(fallback_hi).values
         else:
-            low_thr_val = low_thr
-            high_thr_val = high_thr
+            lo_vals = np.full(n, low_thr)
+            hi_vals = np.full(n, high_thr)
     else:
-        low_thr_val = 0.0
-        high_thr_val = 0.0
+        lo_vals = np.zeros(n)
+        hi_vals = np.zeros(n)
 
     data["regime"] = np.where(
-        entropy_main < low_thr_val, 0,
-        np.where(entropy_main > high_thr_val, 2, 1)
+        entropy_main < lo_vals, 0,
+        np.where(entropy_main > hi_vals, 2, 1)
     )
 
     # === 9. Global frequency per ball (vectorized cumulative — leak-free) ===

@@ -14,5 +14,7 @@
   "no_duplicates": true,
   "train_ratio": 0.80,
   "mean_allowance": 0.05,
-  "mode_allowance": 0.10
+  "mode_allowance": 0.10,
+  "hot_hand_or": 1.039,
+  "hot_hand_window": 10
 }

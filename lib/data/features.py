@@ -163,6 +163,22 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     for idx, col in enumerate(ball_cols_main):
         data[f"{col}_global_freq"] = running_global[np.arange(n), ball_arr[:, idx].astype(int)]
 
+    # === 9b. Value-level global windowed recent count (leak-free) ===
+    # For row i and window W: how many times did Ball_k[i]'s value appear in
+    # ANY ball position across rows max(0, i-W)..i-1.
+    # This is the position-agnostic hot-hand signal: OR≈1.11 for Cash5
+    # (permutation-tested). running_global[i,v] already holds the cumulative
+    # count of v in rows 0..i-1, so the windowed count is a simple difference.
+    row_indices = np.arange(n)
+    for window in recent_count_windows:
+        prior_indices = np.maximum(0, row_indices - window)
+        for idx, col in enumerate(ball_cols_main):
+            col_vals = ball_arr[:, idx].astype(int)
+            data[f"{col}_global_recent_{window}"] = (
+                running_global[row_indices, col_vals]
+                - running_global[prior_indices, col_vals]
+            )
+
     # === 10. Gap tracking (sequential — state-dependent with within-row updates) ===
     number_last_seen = {
         num: None

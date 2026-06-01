@@ -34,7 +34,8 @@ def _is_diverse(predictions, all_predictions, min_diversity):
 
 
 def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
-                       recency_weights=None, recency_blend=0.0):
+                       recency_weights=None, recency_blend=0.0,
+                       hot_ball_set=None, hot_hand_or=1.0):
     """
     Sample from classifier probabilities with temperature scaling.
 
@@ -45,6 +46,10 @@ def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
     recency_blend:  weight for recency prior.  Final mix is:
                     (1 - smoothing - recency_blend)*model + smoothing*uniform
                     + recency_blend*recency
+    hot_ball_set:   set of ball values that appeared in the last N draws.
+    hot_hand_or:    odds ratio for hot balls, from empirical permutation tests.
+                    Applied as a Bayesian multiplier after mixing, before
+                    temperature scaling. 1.0 = disabled.
     """
     proba = model.predict_proba(input_vector)[0]
     classes = model.classes_
@@ -63,6 +68,15 @@ def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
         if rec_sum > 0:
             rec /= rec_sum
             proba = proba + recency_blend * rec
+
+    # Hot-hand OR adjustment: multiply P(v) by the empirically calibrated OR
+    # for each hot ball value, then renormalise. Applied after mixing so it acts
+    # as a global Bayesian prior on top of the blended model distribution.
+    if hot_ball_set and hot_hand_or != 1.0:
+        adj = np.array([hot_hand_or if int(c) in hot_ball_set else 1.0
+                        for c in classes])
+        proba = proba * adj
+        proba /= proba.sum()
 
     # Temperature scaling
     scaled = np.power(np.clip(proba, 1e-12, None), 1.0 / max(temperature, 1e-6))
@@ -616,6 +630,16 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
         gap = (n_rows - 1 - last_idx) if mask.any() else n_rows
         recency_weights[num] = 1.0 / (gap + 1)
 
+    # Hot-hand OR adjustment: values that appeared in the last hot_hand_window
+    # draws are multiplied by hot_hand_or in _sample_from_proba. Calibrated
+    # from per-game permutation tests; 1.0 (default) disables the adjustment.
+    hot_hand_or = config.get("hot_hand_or", 1.0)
+    hot_hand_window = config.get("hot_hand_window", 10)
+    hot_ball_set = set()
+    if hot_hand_or != 1.0:
+        recent = data[ball_cols].tail(hot_hand_window).values.ravel()
+        hot_ball_set = set(int(v) for v in recent)
+
     while runs_completed < max_runs:
         retries = 0
 
@@ -656,7 +680,8 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 input_vec  = _align_input(model, input_vector)
 
                 pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
-                                               recency_weights, recency_blend)
+                                               recency_weights, recency_blend,
+                                               hot_ball_set, hot_hand_or)
 
                 # Duplicate check
                 if no_duplicates and pred in used_numbers:
@@ -677,7 +702,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 temperature = cal_temp * (regime_temp / 1.2)
                 pred, conf = _sample_from_proba(
                     model, _align_input(model, input_vector), temperature, smoothing,
-                    recency_weights, recency_blend
+                    recency_weights, recency_blend, hot_ball_set, hot_hand_or
                 )
                 predictions.append(pred)
                 confidences.append(conf)

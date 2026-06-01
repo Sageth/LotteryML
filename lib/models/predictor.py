@@ -34,7 +34,8 @@ def _is_diverse(predictions, all_predictions, min_diversity):
 
 
 def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
-                       recency_weights=None, recency_blend=0.0):
+                       recency_weights=None, recency_blend=0.0,
+                       hot_ball_set=None, hot_hand_or=1.0):
     """
     Sample from classifier probabilities with temperature scaling.
 
@@ -45,6 +46,10 @@ def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
     recency_blend:  weight for recency prior.  Final mix is:
                     (1 - smoothing - recency_blend)*model + smoothing*uniform
                     + recency_blend*recency
+    hot_ball_set:   set of ball values that appeared in the last N draws.
+    hot_hand_or:    odds ratio for hot balls, from empirical permutation tests.
+                    Applied as a Bayesian multiplier after mixing, before
+                    temperature scaling. 1.0 = disabled.
     """
     proba = model.predict_proba(input_vector)[0]
     classes = model.classes_
@@ -63,6 +68,15 @@ def _sample_from_proba(model, input_vector, temperature=1.0, smoothing=0.0,
         if rec_sum > 0:
             rec /= rec_sum
             proba = proba + recency_blend * rec
+
+    # Hot-hand OR adjustment: multiply P(v) by the empirically calibrated OR
+    # for each hot ball value, then renormalise. Applied after mixing so it acts
+    # as a global Bayesian prior on top of the blended model distribution.
+    if hot_ball_set and hot_hand_or != 1.0:
+        adj = np.array([hot_hand_or if int(c) in hot_ball_set else 1.0
+                        for c in classes])
+        proba = proba * adj
+        proba /= proba.sum()
 
     # Temperature scaling
     scaled = np.power(np.clip(proba, 1e-12, None), 1.0 / max(temperature, 1e-6))
@@ -398,6 +412,39 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
 
     models["multi_output"] = mo_model
 
+    # --- Value-appearance model: predicts P(value v appears anywhere in next draw) ---
+    # Target: binary vector Y[v] = 1 if value v appears in draw i+1, for all v in range.
+    # Trained AFTER multi-output stacking so mo_pred features are available as input.
+    # This directly captures the hot-hand signal (OR≈1.11 for Cash5, OR≈1.04 for Pick6)
+    # by making "did this value appear recently?" the explicit prediction task rather than
+    # an indirect signal absorbed by per-position sorted classifiers.
+    va_model_path = os.path.join(gamedir, config["model_save_path"], "ValueAppear.joblib")
+    va_lo = config["ball_game_range_low"]
+    va_hi = config["ball_game_range_high"]
+    va_range = va_hi - va_lo + 1
+    va_ball_cols = stats["ball_cols"]  # main ball columns only
+
+    # Minimum samples needed: at least 2× the range size for meaningful classifiers
+    va_min_samples = max(50, va_range * 2)
+    if len(x_train) >= va_min_samples:
+        y_appear_train = np.zeros((len(x_train), va_range), dtype=np.int8)
+        for col in va_ball_cols:
+            vals = y_train_frame[col].values.astype(int)
+            valid_mask = (vals >= va_lo) & (vals <= va_hi)
+            y_appear_train[np.where(valid_mask), vals[valid_mask] - va_lo] = 1
+
+        if os.path.exists(va_model_path) and not force_retrain:
+            va_model = joblib.load(va_model_path)
+            log.info(f"Loaded existing value-appearance model: {va_model_path}")
+        else:
+            va_model = _MOC(_MORF(n_estimators=50, max_depth=8, random_state=42, n_jobs=-1))
+            va_model.fit(x_train, y_appear_train)
+            joblib.dump(va_model, va_model_path)
+            log.info(f"Trained and saved value-appearance model: {va_model_path}")
+
+        models["value_appear"] = va_model
+        models["value_appear_range"] = (va_lo, va_hi)
+
     # Temperature-scaling calibration: most recent cal_ratio of training data
     # is held out to calibrate each model's temperature post-hoc.  Must be
     # chronologically AFTER the fit data to prevent any leakage.
@@ -616,6 +663,16 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
         gap = (n_rows - 1 - last_idx) if mask.any() else n_rows
         recency_weights[num] = 1.0 / (gap + 1)
 
+    # Hot-hand OR adjustment: values that appeared in the last hot_hand_window
+    # draws are multiplied by hot_hand_or in _sample_from_proba. Calibrated
+    # from per-game permutation tests; 1.0 (default) disables the adjustment.
+    hot_hand_or = config.get("hot_hand_or", 1.0)
+    hot_hand_window = config.get("hot_hand_window", 10)
+    hot_ball_set = set()
+    if hot_hand_or != 1.0:
+        recent = data[ball_cols].tail(hot_hand_window).values.ravel()
+        hot_ball_set = set(int(v) for v in recent)
+
     while runs_completed < max_runs:
         retries = 0
 
@@ -646,26 +703,63 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 
             valid = True
 
-            # Predict main balls
-            for ball in config["game_balls"]:
-                model  = models[ball]
-                # Blend calibrated temperature with regime signal:
-                # cal_temp is the statistically correct base; regime scales it.
-                cal_temp   = cal_temps.get(f"Ball{ball}", regime_temp)
-                temperature = cal_temp * (regime_temp / 1.2)  # 1.2 = neutral regime temp
-                input_vec  = _align_input(model, input_vector)
+            # --- Predict main balls ---
+            # Two prediction paths:
+            # 1. value-appearance (Fix 3): samples all balls jointly from
+            #    P(value v appears), architecturally aligned with hot-hand signal.
+            #    Enabled by config use_value_appearance=true. Still being tuned;
+            #    per-position currently outperforms on Cash5 paired experiments.
+            # 2. per-position (default): original sorted-position classifiers,
+            #    now enriched with global_recent features (Fix 2).
+            use_va = config.get("use_value_appearance", False)
+            if use_va and "value_appear" in models:
+                va_lo, va_hi = models["value_appear_range"]
+                va_input = _align_input(models["value_appear"], input_vector)
+                # predict_proba returns list of (1, 2) arrays, one per value
+                va_probas_list = models["value_appear"].predict_proba(va_input)
+                appear_proba = np.array([p[0, 1] for p in va_probas_list])
 
-                pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
-                                               recency_weights, recency_blend)
+                # Hot-hand OR adjustment on the appearance distribution
+                if hot_ball_set and hot_hand_or != 1.0:
+                    adj = np.array([hot_hand_or if (va_lo + i) in hot_ball_set else 1.0
+                                    for i in range(len(appear_proba))])
+                    appear_proba = appear_proba * adj
 
-                # Duplicate check
-                if no_duplicates and pred in used_numbers:
-                    valid = False
-                    break
+                # Temperature + recency blend (same philosophy as per-position)
+                temperature = cal_temps.get("Ball1", regime_temp) * (regime_temp / 1.2)
+                appear_proba = np.power(np.clip(appear_proba, 1e-12, None),
+                                        1.0 / max(temperature, 1e-6))
+                if recency_blend > 0.0:
+                    rec = np.array([recency_weights.get(va_lo + i, 0.0)
+                                    for i in range(len(appear_proba))])
+                    rec_sum = rec.sum()
+                    if rec_sum > 0:
+                        rec = rec / rec_sum
+                        appear_proba = (1.0 - recency_blend) * appear_proba + recency_blend * rec
+                appear_proba = np.clip(appear_proba, 1e-12, None)
+                appear_proba /= appear_proba.sum()
 
-                used_numbers.add(pred)
-                predictions.append(pred)
-                confidences.append(conf)
+                va_values = np.arange(va_lo, va_hi + 1)
+                sampled = np.random.choice(va_values, size=num_main, replace=False, p=appear_proba)
+                predictions = sorted(sampled.tolist())
+                confidences = [float(appear_proba[v - va_lo]) for v in predictions]
+                used_numbers = set(predictions)
+            else:
+                # Fallback: original per-position sampling
+                for ball in config["game_balls"]:
+                    model = models[ball]
+                    cal_temp = cal_temps.get(f"Ball{ball}", regime_temp)
+                    temperature = cal_temp * (regime_temp / 1.2)
+                    input_vec = _align_input(model, input_vector)
+                    pred, conf = _sample_from_proba(model, input_vec, temperature, smoothing,
+                                                   recency_weights, recency_blend,
+                                                   hot_ball_set, hot_hand_or)
+                    if no_duplicates and pred in used_numbers:
+                        valid = False
+                        break
+                    used_numbers.add(pred)
+                    predictions.append(pred)
+                    confidences.append(conf)
 
             if not valid:
                 continue
@@ -677,7 +771,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
                 temperature = cal_temp * (regime_temp / 1.2)
                 pred, conf = _sample_from_proba(
                     model, _align_input(model, input_vector), temperature, smoothing,
-                    recency_weights, recency_blend
+                    recency_weights, recency_blend, hot_ball_set, hot_hand_or
                 )
                 predictions.append(pred)
                 confidences.append(conf)

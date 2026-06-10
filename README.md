@@ -72,6 +72,18 @@ python lottery.py MegaMillions --accuracy-regimes
 python lottery.py NJ_Cash4Life --force-retrain --automerge
 ```
 
+### Fetch the latest winning numbers automatically
+```shell
+python lottery.py NJ_Pick6 --update-data
+```
+Appends draws newer than the source CSV's last row from the NJ Lottery public API (covers all games, including multi-state ones).
+
+### Predict multiple upcoming draw dates
+```shell
+python lottery.py Powerball --draws 3
+```
+Writes one prediction file per scheduled draw date (per the game's `draw_days` config), so live accuracy scoring matches each file to its actual draw.
+
 ## Configuration
 Each game has a config.json in its directory.
 These configs are clean, minimal, and JSON‑native.
@@ -114,6 +126,29 @@ Required fields
 | prediction_smoothing     | 0.3            | Uniform mixture weight α: `p = (1-α)*model + α*uniform` (prevents mode collapse) |
 | regime_temperatures      | {0:0.8,1:1.2,2:1.6} | Sampling temperature per entropy regime (higher = more diverse)      |
 | test_prediction_runs     | 10             | Number of prediction runs generated per date                                |
+| draw_days                | all days       | Weekday names the game draws on, e.g. `["Monday", "Thursday", "Saturday"]`  |
+| fetch_game_name          | (none)         | Game name in the NJ Lottery API (e.g. `"Pick 6"`); required for `--update-data` |
+
+---
+
+## Adding new features (conventions)
+
+When adding a feature section to `lib/data/features.py`:
+
+1. **Add columns to the `new_cols` dict — never assign to `data[...]` directly.**
+   All engineered columns are attached in a single `pd.concat` at the end of
+   `engineer_features`. Per-column inserts fragment the DataFrame (pandas
+   `PerformanceWarning`) and slow everything downstream. The dict's insertion
+   order defines the feature order models are trained on.
+2. **Features must be leak-free.** Row *i* may only be computed from rows
+   0..*i−1* — use `shift(1)`, cumulative sums shifted by one, or online state
+   updated *after* reading. Anything that peeks at the current or future rows
+   inflates accuracy without real predictive power.
+3. **Saved models retrain automatically** when the feature set changes
+   (`build_models` validates each loaded model's feature signature at load
+   time), so feature PRs don't require a manual `--force-retrain` on other
+   machines — though a one-time `--force-retrain` is still useful so the
+   per-ball models pick up the new features immediately.
 
 ---
 

@@ -627,12 +627,12 @@ def _temperature_for_regime(regime, config):
 # ------------------------------------------------------------
 #  Prediction generation
 # ------------------------------------------------------------
-def generate_predictions(data, config, models, stats, log, test_scores=None, test_mode=False):
+def generate_predictions(data, config, models, stats, log, test_scores=None, test_mode=False, target_date=None):
     x_data = data.drop(columns=["Date"] + stats["ball_cols"] + ["sum"])
 
     all_predictions = []
     runs_completed = 0
-    today_str = datetime.now().strftime('%Y-%m-%d')
+    today_str = target_date or datetime.now().strftime('%Y-%m-%d')
 
     max_runs = config.get("test_prediction_runs", 10)
     max_retries = config.get("max_prediction_retries", 50)
@@ -845,8 +845,8 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
 # ------------------------------------------------------------
 #  Export predictions
 # ------------------------------------------------------------
-def export_predictions(predictions, gamedir, log):
-    today_str = datetime.now().strftime('%Y-%m-%d')
+def export_predictions(predictions, gamedir, log, date_str=None):
+    today_str = date_str or datetime.now().strftime('%Y-%m-%d')
     prediction_path = os.path.join(gamedir, "predictions", f"{today_str}.json")
     os.makedirs(os.path.dirname(prediction_path), exist_ok=True)
 
@@ -859,10 +859,10 @@ def export_predictions(predictions, gamedir, log):
 # ------------------------------------------------------------
 #  Skip if already predicted today
 # ------------------------------------------------------------
-def should_skip_predictions(gamedir, log) -> bool:
-    today_str = datetime.now().strftime('%Y-%m-%d')
+def should_skip_predictions(gamedir, log, date_str=None) -> bool:
+    today_str = date_str or datetime.now().strftime('%Y-%m-%d')
     prediction_path = os.path.join(gamedir, "predictions", f"{today_str}.json")
     if os.path.exists(prediction_path):
-        log.info(f"Prediction already exists for today at {prediction_path}. Skipping.")
+        log.info(f"Prediction already exists for {today_str} at {prediction_path}. Skipping.")
         return True
     return False

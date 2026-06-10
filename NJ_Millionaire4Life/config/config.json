@@ -15,7 +15,17 @@
   "game_balls_extra_high": 5,
   "model_save_path": "models",
   "no_duplicates": true,
-  "train_ratio": 0.80,
+  "train_ratio": 0.8,
   "mean_allowance": 0.05,
-  "mode_allowance": 0.10
+  "mode_allowance": 0.1,
+  "draw_days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday"
+  ],
+  "fetch_game_name": "Millionaire 4 Life"
 }

@@ -162,7 +162,12 @@ def fetch_new_draws(gamedir, config, log):
     # Append in the CSV's existing column order, zero-padding ball numbers
     # to match the established format (e.g. "01,13,15,...").
     columns = list(existing.columns)
+    with open(csv_path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        ends_with_newline = f.read(1) == b"\n"
     with open(csv_path, "a") as f:
+        if not ends_with_newline:
+            f.write("\n")
         for row in rows:
             values = [row["Date"]] + [f"{int(row[c]):02d}" for c in columns[1:]]
             f.write(",".join(values) + "\n")

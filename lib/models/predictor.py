@@ -24,6 +24,23 @@ def _align_input(model, input_vec):
     return input_vec
 
 
+def _model_is_stale(model, current_cols, exact=False):
+    """
+    True if a saved model's fit-time features no longer line up with the
+    pipeline's current feature set, meaning it must be retrained.
+
+    exact=True (models fit on the full feature frame, e.g. MultiOutput):
+    any difference is stale — sklearn rejects extra columns at predict time.
+    exact=False (models fit on a pruned subset, scored via _align_input):
+    only *removed* features make it stale; extra new columns are tolerated.
+    """
+    expected = getattr(model, "feature_names_in_", None)
+    if expected is None:
+        return False
+    expected, current = set(expected), set(current_cols)
+    return expected != current if exact else not expected.issubset(current)
+
+
 def _is_diverse(predictions, all_predictions, min_diversity):
     """True if predictions differ by at least min_diversity balls from every prior run."""
     for prior in all_predictions:
@@ -395,10 +412,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
     # --- Multi-output stacking: train on all balls at once, inject predictions as features ---
     mo_model_path = os.path.join(gamedir, config["model_save_path"], "MultiOutput.joblib")
     y_train_all = y_train_frame
+    mo_model = None
     if os.path.exists(mo_model_path) and not force_retrain:
-        mo_model = joblib.load(mo_model_path)
-        log.info(f"Loaded existing multi-output model: {mo_model_path}")
-    else:
+        candidate = joblib.load(mo_model_path)
+        if _model_is_stale(candidate, x_train.columns, exact=True):
+            log.warning("MultiOutput: saved model's features don't match the current feature set; retraining.")
+        else:
+            mo_model = candidate
+            log.info(f"Loaded existing multi-output model: {mo_model_path}")
+    if mo_model is None:
         mo_model = _MOC(_MORF(n_estimators=50, max_depth=8, random_state=42, n_jobs=-1))
         mo_model.fit(x_train, y_train_all)
         joblib.dump(mo_model, mo_model_path)
@@ -433,10 +455,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             valid_mask = (vals >= va_lo) & (vals <= va_hi)
             y_appear_train[np.where(valid_mask), vals[valid_mask] - va_lo] = 1
 
+        va_model = None
         if os.path.exists(va_model_path) and not force_retrain:
-            va_model = joblib.load(va_model_path)
-            log.info(f"Loaded existing value-appearance model: {va_model_path}")
-        else:
+            candidate = joblib.load(va_model_path)
+            if _model_is_stale(candidate, x_train.columns, exact=True):
+                log.warning("ValueAppear: saved model's features don't match the current feature set; retraining.")
+            else:
+                va_model = candidate
+                log.info(f"Loaded existing value-appearance model: {va_model_path}")
+        if va_model is None:
             va_model = _MOC(_MORF(n_estimators=50, max_depth=8, random_state=42, n_jobs=-1))
             va_model.fit(x_train, y_appear_train)
             joblib.dump(va_model, va_model_path)
@@ -498,10 +525,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             with open(params_path, "w") as _f:
                 json.dump(best_params_store, _f, indent=2)
 
+        model = None
         if os.path.exists(model_path) and not force_retrain:
-            model = joblib.load(model_path)
-            log.info(f"Loaded existing model: {model_path}")
-        else:
+            candidate = joblib.load(model_path)
+            if _model_is_stale(candidate, x_train_ball.columns):
+                log.warning(f"Ball{ball}: saved model references features no longer produced; retraining.")
+            else:
+                model = candidate
+                log.info(f"Loaded existing model: {model_path}")
+        if model is None:
             min_class_count = int(y_fit.value_counts().min())
             calibration_cv  = min(2, min_class_count) if min_class_count >= 2 else None
             if calibration_cv is None:
@@ -576,10 +608,15 @@ def build_models(data: pd.DataFrame, config: dict, gamedir: str, stats: dict, lo
             with open(params_path, "w") as _f:
                 json.dump(best_params_store, _f, indent=2)
 
+        model = None
         if os.path.exists(model_path) and not force_retrain:
-            model = joblib.load(model_path)
-            log.info(f"Loaded existing model: {model_path}")
-        else:
+            candidate = joblib.load(model_path)
+            if _model_is_stale(candidate, x_train.columns):
+                log.warning(f"{extra_col}: saved model references features no longer produced; retraining.")
+            else:
+                model = candidate
+                log.info(f"Loaded existing model: {model_path}")
+        if model is None:
             min_class_count = int(y_fit_ex.value_counts().min())
             calibration_cv  = min(2, min_class_count) if min_class_count >= 2 else None
             if calibration_cv is None:

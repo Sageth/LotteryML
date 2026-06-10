@@ -57,6 +57,12 @@ def run_lottery(gamedir, args):
     log.info("Loading configuration...")
     config = evaluate_config(load_config(gamedir))
 
+    # Update source data from the NJ Lottery API first, so accuracy modes
+    # score against the latest published draws.
+    if args.update_data:
+        log.info("Updating source data with latest winning numbers...")
+        fetch_new_draws(gamedir, config, log)
+
     # Accuracy-only mode
     if args.accuracy:
         log.info("Running live accuracy evaluation...")
@@ -78,11 +84,6 @@ def run_lottery(gamedir, args):
         automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
             github_repo_name=github_repo, )
         automator.run_automerge_workflow()
-
-    # Update source data from the NJ Lottery API before loading
-    if args.update_data:
-        log.info("Updating source data with latest winning numbers...")
-        fetch_new_draws(gamedir, config, log)
 
     log.info("Loading raw data...")
     data = load_data(gamedir)

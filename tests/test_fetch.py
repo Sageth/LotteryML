@@ -199,6 +199,25 @@ def test_multiple_source_csvs_raises(tmp_path, dummy_log):
         fetch_new_draws(str(gamedir), PICK6_CONFIG, dummy_log)
 
 
+def test_append_to_file_without_trailing_newline(tmp_path, monkeypatch, dummy_log):
+    gamedir, csv = _make_gamedir(
+        tmp_path, "Date,Ball1,Ball2,Ball3,Ball4,Ball5,Ball6",
+        ["05/25/2026,01,02,03,04,05,06"],
+    )
+    csv.write_text(csv.read_text().rstrip("\n"))  # strip trailing newline
+    payload = {"draws": [
+        {"gameName": "Pick 6", "drawTime": _draw_time_ms(2026, 6, 4), "results": [
+            {"drawType": "Regular", "primary": ["1", "2", "3", "4", "5", "6"]},
+        ]},
+    ]}
+    _patch_api(monkeypatch, payload)
+
+    assert fetch_new_draws(str(gamedir), PICK6_CONFIG, dummy_log) == 1
+    df = pd.read_csv(csv)  # must not glue rows together
+    assert len(df) == 2
+    assert df.iloc[0].tolist() == ["05/25/2026", 1, 2, 3, 4, 5, 6]
+
+
 def test_already_current_skips_fetch(tmp_path, monkeypatch, dummy_log):
     today = datetime.now(ET).strftime("%m/%d/%Y")
     gamedir, _ = _make_gamedir(

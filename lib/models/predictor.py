@@ -41,6 +41,38 @@ def _model_is_stale(model, current_cols, exact=False):
     return expected != current if exact else not expected.issubset(current)
 
 
+def _consensus_prediction(valid_runs, config):
+    """
+    Majority vote per ball position across runs. When no_duplicates is set,
+    main-ball positions must not repeat a number already chosen: each position
+    takes its most-voted unused value, falling back to the most-voted unused
+    value across all main positions, then to the lowest unused number in range.
+    The extra ball (if any) is a separate pool and may match a main ball.
+    """
+    from collections import Counter
+    num_main = len(config["game_balls"])
+    no_dup = config.get("no_duplicates", False)
+
+    consensus, used = [], set()
+    for pos_idx in range(len(valid_runs[0]["predicted"])):
+        counts = Counter(r["predicted"][pos_idx] for r in valid_runs)
+        is_main = pos_idx < num_main
+        dedup = no_dup and is_main
+
+        pick = next((c for c, _ in counts.most_common() if not (dedup and c in used)), None)
+        if pick is None:
+            pool = Counter(v for r in valid_runs for v in r["predicted"][:num_main])
+            pick = next((c for c, _ in pool.most_common() if c not in used), None)
+        if pick is None:
+            lo, hi = config["ball_game_range_low"], config["ball_game_range_high"]
+            pick = next(n for n in range(lo, hi + 1) if n not in used)
+
+        if dedup:
+            used.add(pick)
+        consensus.append(pick)
+    return consensus
+
+
 def _is_diverse(predictions, all_predictions, min_diversity):
     """True if predictions differ by at least min_diversity balls from every prior run."""
     for prior in all_predictions:
@@ -862,11 +894,7 @@ def generate_predictions(data, config, models, stats, log, test_scores=None, tes
     # Consensus prediction: majority vote per ball position across all runs
     valid_runs = [p for p in all_predictions if "predicted" in p]
     if len(valid_runs) >= 2:
-        from collections import Counter
-        consensus = []
-        for pos_idx in range(len(valid_runs[0]["predicted"])):
-            counts = Counter(r["predicted"][pos_idx] for r in valid_runs)
-            consensus.append(counts.most_common(1)[0][0])
+        consensus = _consensus_prediction(valid_runs, config)
         all_predictions.append({
             "run": "consensus",
             "date": today_str,

@@ -2,6 +2,17 @@
 
 from datetime import date, timedelta
 
+
+def prediction_start_date(last_draw_date, today=None):
+    """
+    First date eligible for a prediction: today, unless the source data
+    already contains today's draw (e.g. an evening run after results were
+    published), in which case start the day after the last recorded draw.
+    Prevents exporting hindsight "predictions" for already-known outcomes.
+    """
+    today = today or date.today()
+    return max(today, last_draw_date + timedelta(days=1))
+
 _WEEKDAY_INDEX = {
     "monday": 0,
     "tuesday": 1,

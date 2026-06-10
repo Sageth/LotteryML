@@ -11,6 +11,7 @@ import warnings
 # OMP_NUM_THREADS=4 keeps parallelism without the overhead.
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
+import pandas as pd
 from dotenv import load_dotenv
 
 from lib.config.loader import load_config, evaluate_config
@@ -19,7 +20,7 @@ from lib.data.fetch import fetch_new_draws
 from lib.data.github import GitHubAutoMerge
 from lib.data.io import load_data
 from lib.data.normalize import normalize_features
-from lib.data.schedule import next_draw_dates
+from lib.data.schedule import next_draw_dates, prediction_start_date
 from lib.models.accuracy import report_live_accuracy_all, evaluate_model_accuracy
 from lib.models.predictor import (should_skip_predictions, prepare_statistics, build_models, generate_predictions,
                                   export_predictions, )
@@ -83,9 +84,15 @@ def run_lottery(gamedir, args):
         log.info("Updating source data with latest winning numbers...")
         fetch_new_draws(gamedir, config, log)
 
-    # Target the next N scheduled draw dates (per config draw_days);
-    # skip dates that already have a prediction file.
-    target_dates = next_draw_dates(config, args.draws)
+    log.info("Loading raw data...")
+    data = load_data(gamedir)
+
+    # Target the next N scheduled draw dates (per config draw_days), starting
+    # after the last draw already in the source data; skip dates that already
+    # have a prediction file.
+    last_draw = pd.to_datetime(data["Date"]).max().date()
+    start = prediction_start_date(last_draw)
+    target_dates = next_draw_dates(config, args.draws, start=start)
     if not args.force_retrain:
         target_dates = [d for d in target_dates if not should_skip_predictions(gamedir, log, d)]
     if not target_dates:
@@ -93,9 +100,6 @@ def run_lottery(gamedir, args):
         if args.automerge:
             run_automerge()
         return
-
-    log.info("Loading raw data...")
-    data = load_data(gamedir)
 
     log.info("Engineering features (including entropy + regime)...")
     data = engineer_features(data, config, log)

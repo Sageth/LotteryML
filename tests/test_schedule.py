@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from lib.data.schedule import next_draw_dates
+from lib.data.schedule import next_draw_dates, prediction_start_date
 
 
 # 2026-06-09 is a Tuesday
@@ -45,3 +45,17 @@ def test_invalid_weekday_raises():
 def test_defaults_to_today_without_start():
     dates = next_draw_dates({}, 1)
     assert dates == [date.today().isoformat()]
+
+
+def test_prediction_start_is_today_when_data_is_behind():
+    # last recorded draw was days ago — predictions start today
+    assert prediction_start_date(date(2026, 6, 5), today=TUESDAY) == TUESDAY
+
+
+def test_prediction_start_skips_already_recorded_draw():
+    # today's draw is already in the data — start tomorrow
+    assert prediction_start_date(TUESDAY, today=TUESDAY) == date(2026, 6, 10)
+
+
+def test_prediction_start_defaults_to_today():
+    assert prediction_start_date(date(2020, 1, 1)) == date.today()

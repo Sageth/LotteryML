@@ -136,12 +136,21 @@ class GitHubAutoMerge:
             merged = True
             print("Pull request merged successfully.")
 
-            # Delete the remote branch after a successful merge
+            # Delete the remote branch after a successful merge. With GitHub's
+            # "automatically delete head branches" enabled, the ref is usually
+            # gone before we get here -- that's success, not a warning.
             try:
                 self.repo.git.push(self.remote_name, '--delete', new_branch_name)
                 print(f"Deleted remote branch '{new_branch_name}'.")
             except Exception as e:
-                print(f"Warning: could not delete remote branch '{new_branch_name}': {e}")
+                try:
+                    branch_gone = not self.repo.git.ls_remote('--heads', self.remote_name, new_branch_name)
+                except Exception:
+                    branch_gone = False
+                if branch_gone:
+                    print(f"Remote branch '{new_branch_name}' was already deleted by GitHub.")
+                else:
+                    print(f"Warning: could not delete remote branch '{new_branch_name}': {e}")
 
             # Switch back to main and pull the merged result
             self.repo.git.checkout(self.main_branch)

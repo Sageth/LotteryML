@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 import warnings
 
 # Cap OpenMP threads before sklearn imports. On many-core machines (e.g. 24 cores)
@@ -80,10 +81,12 @@ def run_lottery(gamedir, args):
         log.info("Running GitHub automerge workflow...")
         if not github_pat or not repo_path or not github_owner or not github_repo:
             log.error("Missing GitHub environment variables. Automerge aborted.")
-            return
+            sys.exit(1)
         automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
             github_repo_name=github_repo, )
-        automator.run_automerge_workflow()
+        if not automator.run_automerge_workflow():
+            log.error("Automerge workflow failed. Predictions were not merged to GitHub.")
+            sys.exit(1)
 
     log.info("Loading raw data...")
     data = load_data(gamedir)

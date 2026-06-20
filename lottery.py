@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 import warnings
 
 # Cap OpenMP threads before sklearn imports. On many-core machines (e.g. 24 cores)
@@ -11,13 +12,16 @@ import warnings
 # OMP_NUM_THREADS=4 keeps parallelism without the overhead.
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
+import pandas as pd
 from dotenv import load_dotenv
 
 from lib.config.loader import load_config, evaluate_config
 from lib.data.features import engineer_features
+from lib.data.fetch import fetch_new_draws
 from lib.data.github import GitHubAutoMerge
 from lib.data.io import load_data
 from lib.data.normalize import normalize_features
+from lib.data.schedule import next_draw_dates, prediction_start_date
 from lib.models.accuracy import report_live_accuracy_all, evaluate_model_accuracy
 from lib.models.predictor import (should_skip_predictions, prepare_statistics, build_models, generate_predictions,
                                   export_predictions, )
@@ -54,6 +58,12 @@ def run_lottery(gamedir, args):
     log.info("Loading configuration...")
     config = evaluate_config(load_config(gamedir))
 
+    # Update source data from the NJ Lottery API first, so accuracy modes
+    # score against the latest published draws.
+    if args.update_data:
+        log.info("Updating source data with latest winning numbers...")
+        fetch_new_draws(gamedir, config, log)
+
     # Accuracy-only mode
     if args.accuracy:
         log.info("Running live accuracy evaluation...")
@@ -71,19 +81,29 @@ def run_lottery(gamedir, args):
         log.info("Running GitHub automerge workflow...")
         if not github_pat or not repo_path or not github_owner or not github_repo:
             log.error("Missing GitHub environment variables. Automerge aborted.")
-            return
+            sys.exit(1)
         automator = GitHubAutoMerge(repo_path=repo_path, github_pat=github_pat, github_owner=github_owner,
             github_repo_name=github_repo, )
-        automator.run_automerge_workflow()
-
-    # Skip if already predicted today
-    if not args.force_retrain and should_skip_predictions(gamedir, log):
-        if args.automerge:
-            run_automerge()
-        return
+        if not automator.run_automerge_workflow():
+            log.error("Automerge workflow failed. Predictions were not merged to GitHub.")
+            sys.exit(1)
 
     log.info("Loading raw data...")
     data = load_data(gamedir)
+
+    # Target the next N scheduled draw dates (per config draw_days), starting
+    # after the last draw already in the source data; skip dates that already
+    # have a prediction file.
+    last_draw = pd.to_datetime(data["Date"]).max().date()
+    start = prediction_start_date(last_draw)
+    target_dates = next_draw_dates(config, args.draws, start=start)
+    if not args.force_retrain:
+        target_dates = [d for d in target_dates if not should_skip_predictions(gamedir, log, d)]
+    if not target_dates:
+        log.info("All upcoming draw dates already have predictions.")
+        if args.automerge:
+            run_automerge()
+        return
 
     log.info("Engineering features (including entropy + regime)...")
     data = engineer_features(data, config, log)
@@ -97,17 +117,22 @@ def run_lottery(gamedir, args):
     log.info("Training or loading models...")
     models, test_scores = build_models(data, config, gamedir, stats, log, force_retrain=args.force_retrain, tune=args.tune)
 
-    log.info("Generating predictions...")
-    predictions = generate_predictions(data, config, models, stats, log, test_scores, test_mode=args.test_mode)
+    for target_date in target_dates:
+        log.info(f"Generating predictions for draw date {target_date}...")
+        predictions = generate_predictions(data, config, models, stats, log, test_scores,
+                                           test_mode=args.test_mode, target_date=target_date)
+
+        if args.dry_run:
+            log.info("Dry run enabled — not exporting predictions.")
+            for p in predictions:
+                log.info(f"Prediction: {p}")
+            continue
+
+        log.info(f"Exporting predictions for {target_date}...")
+        export_predictions(predictions, gamedir, log, date_str=target_date)
 
     if args.dry_run:
-        log.info("Dry run enabled — not exporting predictions.")
-        for p in predictions:
-            log.info(f"Prediction: {p}")
         return
-
-    log.info("Exporting predictions...")
-    export_predictions(predictions, gamedir, log)
 
     if args.automerge:
         run_automerge()
@@ -134,6 +159,10 @@ def main():
                         help="Run Optuna TPE search to tune HGBC hyperparameters and sampling params (smoothing, recency_blend, regime temperatures)")
     parser.add_argument("--automerge", action="store_true",
                         help="Automatically commit and merge prediction updates to GitHub")
+    parser.add_argument("--draws", type=int, default=1,
+                        help="Number of upcoming draw dates to predict (one prediction file per draw date)")
+    parser.add_argument("--update-data", action="store_true",
+                        help="Fetch the latest winning numbers from the NJ Lottery API and append to source CSV")
 
     args = parser.parse_args()
     run_lottery(args.gamedir, args)

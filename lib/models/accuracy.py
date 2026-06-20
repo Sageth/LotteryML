@@ -223,6 +223,10 @@ def evaluate_model_accuracy(gamedir, log):
     test_data = data.tail(int(len(data) * (1 - config.get("train_ratio", 0.8))))
     test_rows = list(test_data.iterrows())
 
+    hot_hand_or = config.get("hot_hand_or", 1.0)
+    hot_hand_window = config.get("hot_hand_window", 10)
+    ball_cols_main = [f"Ball{b}" for b in config["game_balls"]]
+
     # Storage
     model_hits = []
     uniform_hits = []
@@ -234,8 +238,15 @@ def evaluate_model_accuracy(gamedir, log):
     regime_counts = {0: 0, 1: 0, 2: 0}
 
     for idx in range(len(test_rows) - 1):
-        _, row      = test_rows[idx]       # features from draw i
-        _, next_row = test_rows[idx + 1]   # actual balls from draw i+1
+        data_idx, row = test_rows[idx]     # features from draw i
+        _,        next_row = test_rows[idx + 1]   # actual balls from draw i+1
+
+        # Hot ball set: values from the window draws immediately before this row
+        hot_ball_set = set()
+        if hot_hand_or != 1.0:
+            win_start = max(0, data_idx - hot_hand_window + 1)
+            hot_arr = data.loc[win_start:data_idx, ball_cols_main].values.ravel()
+            hot_ball_set = set(int(v) for v in hot_arr)
 
         actual = [next_row[f"Ball{i}"] for i in config["game_balls"]]
         if config.get("game_has_extra", False):
@@ -259,12 +270,16 @@ def evaluate_model_accuracy(gamedir, log):
         predicted = []
         for ball in config["game_balls"]:
             x_ball = _align_input(models[ball], x_row)
-            pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0)
+            pred, _ = _sample_from_proba(models[ball], x_ball, temperature=1.0,
+                                         hot_ball_set=hot_ball_set,
+                                         hot_hand_or=hot_hand_or)
             predicted.append(pred)
 
         if config.get("game_has_extra", False):
             x_extra = _align_input(models["extra"], x_row)
-            pred, _ = _sample_from_proba(models["extra"], x_extra, temperature=1.0)
+            pred, _ = _sample_from_proba(models["extra"], x_extra, temperature=1.0,
+                                         hot_ball_set=hot_ball_set,
+                                         hot_hand_or=hot_hand_or)
             predicted.append(pred)
 
         # Baselines

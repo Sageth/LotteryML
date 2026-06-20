@@ -1,3 +1,7 @@
+/models/
+**/models/calibrated_temps.json
+**/models/best_params.json
+**/models/sampling_params.json
 **/venv/
 **/.idea/
 **/.DS_Store

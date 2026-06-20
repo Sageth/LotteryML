@@ -78,15 +78,20 @@ class GitHubAutoMerge:
         This method stages all changes in the working directory and then executes
         the entire workflow on the repository. It commits, pushes, creates a PR,
         and merges it.
+
+        Returns:
+            bool: True if the workflow succeeded or there was nothing to commit,
+            False if any step (commit, push, PR creation, merge) failed. Cleanup
+            of the already-merged branch is best-effort and never fails the run.
         """
         if not self.repo or not self.g:
             print("Initialization failed. Cannot proceed.")
-            return
+            return False
 
         # Bail out early if there's nothing to commit
         if not self.repo.is_dirty(index=True, working_tree=True, untracked_files=True):
             print("No changes to commit. Aborting automerge workflow.")
-            return
+            return True
 
         # Fetch latest remote state so the new branch is up to date
         print(f"Fetching latest '{self.main_branch}'...")
@@ -94,7 +99,7 @@ class GitHubAutoMerge:
             self.repo.git.fetch(self.remote_name, self.main_branch)
         except Exception as e:
             print(f"Failed to fetch '{self.main_branch}': {e}")
-            return
+            return False
 
         # Define branch names and commit message
         new_branch_name = f'automerge-branch-{os.urandom(4).hex()}'
@@ -115,7 +120,7 @@ class GitHubAutoMerge:
 
             if not self.repo.index.diff("HEAD"):
                 print("No staged changes to commit. Aborting automerge workflow.")
-                return
+                return True
 
             self.repo.git.commit('-m', commit_message)
 
@@ -136,23 +141,35 @@ class GitHubAutoMerge:
             merged = True
             print("Pull request merged successfully.")
 
-            # Delete the remote branch after a successful merge
+            # Delete the remote branch after a successful merge. With GitHub's
+            # "automatically delete head branches" enabled, the ref is usually
+            # gone before we get here -- that's success, not a warning.
             try:
                 self.repo.git.push(self.remote_name, '--delete', new_branch_name)
                 print(f"Deleted remote branch '{new_branch_name}'.")
             except Exception as e:
-                print(f"Warning: could not delete remote branch '{new_branch_name}': {e}")
+                try:
+                    branch_gone = not self.repo.git.ls_remote('--heads', self.remote_name, new_branch_name)
+                except Exception:
+                    branch_gone = False
+                if branch_gone:
+                    print(f"Remote branch '{new_branch_name}' was already deleted by GitHub.")
+                else:
+                    print(f"Warning: could not delete remote branch '{new_branch_name}': {e}")
 
             # Switch back to main and pull the merged result
             self.repo.git.checkout(self.main_branch)
             print(f"Switched to local branch '{self.main_branch}'.")
             self.repo.git.pull(self.remote_name, self.main_branch)
             print(f"Pulled latest changes to local branch '{self.main_branch}'.")
+            return True
 
         except git.GitError as e:
             print(f"Git operation failed: {e}")
+            return False
         except Exception as e:
             print(f"GitHub API operation failed: {e}")
+            return False
         finally:
             if merged:
                 try:

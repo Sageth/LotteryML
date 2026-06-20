@@ -22,6 +22,8 @@ python lottery.py <GAMEDIRECTORY>
 - `--accuracy` — Run accuracy evaluation vs. baselines
 - `--accuracy-regimes` — Run regime-aware accuracy breakdown
 - `--automerge` — Commit and merge prediction exports to GitHub (requires `.env`)
+- `--draws N` — Predict the next N scheduled draw dates (default 1); one prediction file per draw date
+- `--update-data` — Fetch the latest winning numbers from the NJ Lottery API (`lib/data/fetch.py`) and append them to the game's source CSV before running
 
 **Run all tests:**
 ```shell
@@ -47,7 +49,7 @@ Coverage is enforced at 85% minimum (`--cov=lib --cov-report=term`).
 ### Pipeline flow (in order)
 1. `lib/config/loader.py` — Load `<gamedir>/config/config.json`; `evaluate_config` resolves `range(...)` strings to Python ranges
 2. `lib/data/io.py` — Load all CSVs from `<gamedir>/source/`; returns a clean DataFrame with `Date` + `Ball1..N` columns
-3. `lib/data/features.py` — Engineer features: lag features, recent count windows, global frequency, gap tracking, multi-scale Shannon entropy, regime classification (0=low/1=normal/2=high entropy)
+3. `lib/data/features.py` — Engineer features: lag features, recent count windows, global frequency, gap tracking, multi-scale Shannon entropy, regime classification (0=low/1=normal/2=high entropy). **Convention:** new feature sections must add columns to the `new_cols` dict, never assign to `data[...]` directly — all columns are attached in one `pd.concat` at the end. This avoids DataFrame fragmentation (PerformanceWarning spam), and the dict's insertion order defines the feature order models are trained on. Features must also be leak-free: row i may only see rows 0..i-1 (use `shift(1)`, cumulative sums, or online state).
 4. `lib/data/normalize.py` — Z-score normalize continuous features, fitted only on training split to avoid leakage; binary/indicator/regime columns are excluded
 5. `lib/models/predictor.py::prepare_statistics` — Compute mean/std/mode of ball sums for filtering
 6. `lib/models/predictor.py::build_models` — Train or load a soft-voting ensemble (`VotingClassifier`: calibrated `RandomForestClassifier` + `HistGradientBoostingClassifier`) per ball position (via `lib/models/builder.py`); models saved as `.joblib` under `<gamedir>/models/`; a chronological calibration split (15% of train) is used to find the optimal temperature per ball via NLL minimisation, saved to `calibrated_temps.json`
@@ -70,7 +72,9 @@ Each game (e.g., `NJ_Pick6`, `Powerball`, `Megamillions`, `NJ_Cash4Life`, `NJ_Ca
 ### Config fields
 `game_balls` is a list like `[1,2,3,4,5,6]` (not ball values — these are ball position indices used to generate column names `Ball1..Ball6`). Games with an extra ball (PowerBall, MegaBall, CashBall) set `game_has_extra: true` and define `game_extra_col`, `game_balls_extra_low/high`.
 
-Optional config fields: `lag_window` (default 5), `entropy_windows` (default [10,25,50]), `entropy_low_threshold`, `entropy_high_threshold`, `regime_temperatures` (default {0:0.8, 1:1.2, 2:1.6}), `input_sample_window` (default 10), `test_prediction_runs` (default 10), `max_prediction_retries` (default 20), `min_confidence` (default 0.01), `include_extra_in_sum`, `prediction_smoothing` (default 0.3 — uniform mixture weight to prevent mode collapse), `calibration_ratio` (default 0.15 — fraction of train data held out for temperature calibration), `freq_decay` (default 0.97 — exponential decay for recency-weighted frequency features), `accuracy_allowance` (default 0.0 — min accuracy delta vs. baseline to accept a retrained model).
+Optional config fields: `lag_window` (default 5), `entropy_windows` (default [10,25,50]), `entropy_low_threshold`, `entropy_high_threshold`, `regime_temperatures` (default {0:0.8, 1:1.2, 2:1.6}), `input_sample_window` (default 10), `test_prediction_runs` (default 10), `max_prediction_retries` (default 20), `min_confidence` (default 0.01), `include_extra_in_sum`, `prediction_smoothing` (default 0.3 — uniform mixture weight to prevent mode collapse), `calibration_ratio` (default 0.15 — fraction of train data held out for temperature calibration), `freq_decay` (default 0.97 — exponential decay for recency-weighted frequency features), `accuracy_allowance` (default 0.0 — min accuracy delta vs. baseline to accept a retrained model), `draw_days` (list of weekday names the game draws on, e.g. `["Monday", "Thursday", "Saturday"]`; used by `lib/data/schedule.py` to pick prediction target dates — absent means daily), `fetch_game_name` (the game's name in the NJ Lottery API, e.g. `"Pick 6"`; required for `--update-data`).
+
+Prediction files are named by **draw date** (the next scheduled draw per `draw_days`), not by run date, so `--accuracy` live scoring can match them to actual draws. Note: NJ_Cash4Life is discontinued (last draw 2026-02-21); its data feed returns nothing new.
 
 ### Testing
 Tests live in `tests/` with shared fixtures in `tests/conftest.py`. The `test_config` fixture loads NJ_Pick6's config with overrides for speed (`test_prediction_runs=1`). `dummy_data` generates synthetic 100-row DataFrames matching config ball ranges.

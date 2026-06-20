@@ -37,12 +37,18 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     data = filtered_data.reset_index(drop=True)
     n = len(data)
 
+    # All engineered columns are collected here and attached with a single
+    # pd.concat at the end — inserting them one-by-one fragments the frame
+    # (PerformanceWarning) and slows later operations. Insertion order is
+    # preserved by the dict and determines the model's feature order.
+    new_cols: dict = {}
+
     # === 2. Lag features (vectorized) ===
     lag_window = config.get("lag_window", 5)
     for lag in range(1, lag_window + 1):
         lagged = data[ball_cols_main].shift(lag)
         for col in ball_cols_main:
-            data[f"{col}_lag{lag}_appeared"] = (lagged[col] == data[col]).astype(int)
+            new_cols[f"{col}_lag{lag}_appeared"] = (lagged[col] == data[col]).astype(int)
 
     # === 3. Recent count features (vectorized via rolling one-hot) ===
     recent_count_windows = config.get("recent_count_windows", [5, 10, 20, 50])
@@ -53,7 +59,7 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         row_col_indices = data[col].map(col_idx_map).fillna(0).astype(int).values
         for window in recent_count_windows:
             rolling_w = shifted_dummies.rolling(window, min_periods=1).sum()
-            data[f"{col}_recent_count_{window}"] = rolling_w.values[
+            new_cols[f"{col}_recent_count_{window}"] = rolling_w.values[
                 np.arange(n), row_col_indices
             ]
 
@@ -62,23 +68,24 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
 
     # === 5. Sum and sum_zscore (vectorized) ===
     # Window of 11 = current row + up to 10 preceding, matching original slice behavior
-    data["sum"] = data[ball_cols_main].sum(axis=1)
-    rolling_sum = data["sum"].rolling(11, min_periods=1)
+    sum_series = data[ball_cols_main].sum(axis=1)
+    new_cols["sum"] = sum_series
+    rolling_sum = sum_series.rolling(11, min_periods=1)
     rolling_std = rolling_sum.std().fillna(0)
-    data["sum_zscore"] = (data["sum"] - rolling_sum.mean()) / (rolling_std + 1e-6)
+    new_cols["sum_zscore"] = (sum_series - rolling_sum.mean()) / (rolling_std + 1e-6)
 
     # === 5b. Sum trend features (multi-scale rolling statistics) ===
     # Captures whether recent sums are trending higher/lower and whether
     # volatility is changing — complements sum_zscore's single window.
     for w in [5, 20, 50]:
-        data[f"sum_rolling_mean_{w}"] = data["sum"].rolling(w, min_periods=1).mean()
-        data[f"sum_rolling_std_{w}"] = data["sum"].rolling(w, min_periods=1).std().fillna(0)
+        new_cols[f"sum_rolling_mean_{w}"] = sum_series.rolling(w, min_periods=1).mean()
+        new_cols[f"sum_rolling_std_{w}"] = sum_series.rolling(w, min_periods=1).std().fillna(0)
 
     # === 6. Even/odd count (vectorized) ===
     ball_arr_all = data[ball_cols_all].values
     even_mask = ball_arr_all % 2 == 0
-    data["even_count"] = even_mask.sum(axis=1)
-    data["odd_count"] = (~even_mask).sum(axis=1)
+    new_cols["even_count"] = even_mask.sum(axis=1)
+    new_cols["odd_count"] = (~even_mask).sum(axis=1)
 
     # === 7. Multi-scale entropy (numpy — avoids pandas overhead per row) ===
     entropy_windows = sorted(set(config.get("entropy_windows", [10, 25, 50])))
@@ -94,47 +101,60 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             _, counts = np.unique(flat, return_counts=True)
             probs = counts / counts.sum()
             entropies[i] = -(probs * np.log(probs + 1e-12)).sum()
-        data[f"entropy_{w}"] = entropies
+        new_cols[f"entropy_{w}"] = entropies
 
     # Primary entropy field (middle window for backward compatibility)
     if entropy_windows:
         mid_w = entropy_windows[len(entropy_windows) // 2]
-        data["entropy"] = data[f"entropy_{mid_w}"]
+        entropy_main = new_cols[f"entropy_{mid_w}"]
     else:
-        data["entropy"] = 0.0
+        entropy_main = np.zeros(n)
+    new_cols["entropy"] = entropy_main
 
     # Entropy trend (largest minus smallest window)
     if len(entropy_windows) >= 2:
-        data["entropy_trend"] = (
-            data[f"entropy_{entropy_windows[-1]}"]
-            - data[f"entropy_{entropy_windows[0]}"]
+        new_cols["entropy_trend"] = (
+            new_cols[f"entropy_{entropy_windows[-1]}"]
+            - new_cols[f"entropy_{entropy_windows[0]}"]
         )
     else:
-        data["entropy_trend"] = 0.0
+        new_cols["entropy_trend"] = np.zeros(n)
 
     # === 8. Regime classification (vectorized) ===
     low_thr = config.get("entropy_low_threshold", None)
     high_thr = config.get("entropy_high_threshold", None)
-    entropy_main = data["entropy"].values
 
     if entropy_windows:
         if low_thr is None or high_thr is None:
-            # Global percentiles of primary entropy across all rows — gives
-            # ~33% of draws in each regime.  The previous per-row percentile
-            # approach (axis=1 across only 3 windows) caused the middle
-            # window to almost always land in regime 1.
-            low_thr_val = np.percentile(entropy_main, 33)
-            high_thr_val = np.percentile(entropy_main, 66)
-        else:
-            low_thr_val = low_thr
-            high_thr_val = high_thr
-    else:
-        low_thr_val = 0.0
-        high_thr_val = 0.0
+            # Rolling percentile thresholds: for row i, the regime is determined
+            # by where entropy[i] sits within the preceding regime_window draws.
+            # shift(1) makes it causal — row i does not influence its own threshold.
+            # This adapts to long-run entropy drift (e.g. from game range expansions)
+            # while remaining fully leak-free.
+            regime_window = config.get("regime_window", 200)
+            entropy_series = pd.Series(entropy_main)
+            shifted = entropy_series.shift(1)
+            lo_rolling = shifted.rolling(regime_window, min_periods=10).quantile(0.33)
+            hi_rolling = shifted.rolling(regime_window, min_periods=10).quantile(0.66)
 
-    data["regime"] = np.where(
-        entropy_main < low_thr_val, 0,
-        np.where(entropy_main > high_thr_val, 2, 1)
+            # Fall back to train-split percentiles for early rows that lack
+            # sufficient rolling history (fewer than min_periods draws).
+            train_ratio = config.get("train_ratio", 0.8)
+            train_n = max(1, int(n * train_ratio))
+            fallback_lo = np.percentile(entropy_main[:train_n], 33)
+            fallback_hi = np.percentile(entropy_main[:train_n], 66)
+            lo_vals = lo_rolling.fillna(fallback_lo).values
+            hi_vals = hi_rolling.fillna(fallback_hi).values
+        else:
+            lo_vals = np.full(n, low_thr)
+            hi_vals = np.full(n, high_thr)
+    else:
+        lo_vals = np.zeros(n)
+        hi_vals = np.zeros(n)
+
+    new_cols["regime"] = np.where(
+        entropy_main < lo_vals, 0,
+        np.where(entropy_main > hi_vals, 2, 1)
     )
 
     # === 9. Global frequency per ball (vectorized cumulative — leak-free) ===
@@ -148,7 +168,23 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         np.cumsum(running_global, axis=0)[:-1],
     ])
     for idx, col in enumerate(ball_cols_main):
-        data[f"{col}_global_freq"] = running_global[np.arange(n), ball_arr[:, idx].astype(int)]
+        new_cols[f"{col}_global_freq"] = running_global[np.arange(n), ball_arr[:, idx].astype(int)]
+
+    # === 9b. Value-level global windowed recent count (leak-free) ===
+    # For row i and window W: how many times did Ball_k[i]'s value appear in
+    # ANY ball position across rows max(0, i-W)..i-1.
+    # This is the position-agnostic hot-hand signal: OR≈1.11 for Cash5
+    # (permutation-tested). running_global[i,v] already holds the cumulative
+    # count of v in rows 0..i-1, so the windowed count is a simple difference.
+    row_indices = np.arange(n)
+    for window in recent_count_windows:
+        prior_indices = np.maximum(0, row_indices - window)
+        for idx, col in enumerate(ball_cols_main):
+            col_vals = ball_arr[:, idx].astype(int)
+            new_cols[f"{col}_global_recent_{window}"] = (
+                running_global[row_indices, col_vals]
+                - running_global[prior_indices, col_vals]
+            )
 
     # === 10. Gap tracking (sequential — state-dependent with within-row updates) ===
     number_last_seen = {
@@ -158,14 +194,14 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     gap_arrays = {col: np.empty(n, dtype=int) for col in ball_cols_main}
 
     for i in range(n):
-        for col in ball_cols_main:
-            val = int(data[col].iat[i])
+        for col_idx, col in enumerate(ball_cols_main):
+            val = int(ball_arr[i, col_idx])
             last_seen = number_last_seen.get(val)
             gap_arrays[col][i] = (i - last_seen) if last_seen is not None else -1
             number_last_seen[val] = i
 
     for col in ball_cols_main:
-        data[f"{col}_gap"] = gap_arrays[col]
+        new_cols[f"{col}_gap"] = gap_arrays[col]
 
     # === 11. Co-occurrence scores (sequential, leak-free) ===
     # For row i, scores how often each ball's value has co-occurred with the
@@ -185,7 +221,7 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
         np.add.at(cooc_running, (row_vals[pair_pos_r], row_vals[pair_pos_c]), 1)
 
     for col in ball_cols_main:
-        data[f"{col}_cooccurrence"] = cooc_scores[col]
+        new_cols[f"{col}_cooccurrence"] = cooc_scores[col]
 
     # === 12. Date/schedule features (cyclical encoding) ===
     # Sine/cosine encoding preserves cyclical adjacency (e.g. Sun/Mon are neighbors).
@@ -193,10 +229,10 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     dow = dates.dt.dayofweek.values        # 0=Mon … 6=Sun
     month = dates.dt.month.values          # 1–12
 
-    data["day_of_week_sin"] = np.sin(2 * np.pi * dow / 7)
-    data["day_of_week_cos"] = np.cos(2 * np.pi * dow / 7)
-    data["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12)
-    data["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12)
+    new_cols["day_of_week_sin"] = np.sin(2 * np.pi * dow / 7)
+    new_cols["day_of_week_cos"] = np.cos(2 * np.pi * dow / 7)
+    new_cols["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12)
+    new_cols["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12)
 
     # === 13. Positional frequency (vectorized cumulative — leak-free) ===
     # For row i, counts how many times that ball value appeared in THIS position
@@ -209,43 +245,34 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
             np.zeros((1, range_max), dtype=np.int32),
             np.cumsum(pos_inc, axis=0)[:-1],
         ])
-        data[f"{col}_pos_freq"] = cumpos[np.arange(n), col_vals]
-
-    # Defragment: sections 1-13 added many columns individually; consolidate
-    # before sections 14-16 to silence PerformanceWarning.
-    data = data.copy()
+        new_cols[f"{col}_pos_freq"] = cumpos[np.arange(n), col_vals]
 
     # === 14. Draw spread features ===
     # Range and average gap between consecutive sorted balls capture
     # whether a draw is tightly clustered or widely spread.
     sorted_arr = np.sort(ball_arr, axis=1)
-    data["draw_range"] = sorted_arr[:, -1] - sorted_arr[:, 0]
+    new_cols["draw_range"] = sorted_arr[:, -1] - sorted_arr[:, 0]
     if ball_arr.shape[1] > 1:
         diffs = np.diff(sorted_arr, axis=1)
-        data["draw_mean_gap"] = diffs.mean(axis=1)
+        new_cols["draw_mean_gap"] = diffs.mean(axis=1)
         # Consecutive number count: pairs of adjacent numbers in a draw
-        data["consecutive_count"] = (diffs == 1).sum(axis=1)
+        new_cols["consecutive_count"] = (diffs == 1).sum(axis=1)
     else:
-        data["draw_mean_gap"] = 0.0
-        data["consecutive_count"] = 0
+        new_cols["draw_mean_gap"] = np.zeros(n)
+        new_cols["consecutive_count"] = np.zeros(n, dtype=int)
 
     # === 15. Zone counts (low / mid / high third of the range) ===
     range_span = config["ball_game_range_high"] - config["ball_game_range_low"] + 1
     z1 = config["ball_game_range_low"] + range_span / 3
     z2 = config["ball_game_range_low"] + 2 * range_span / 3
-    data["zone_low_count"]  = (ball_arr < z1).sum(axis=1)
-    data["zone_mid_count"]  = ((ball_arr >= z1) & (ball_arr < z2)).sum(axis=1)
-    data["zone_high_count"] = (ball_arr >= z2).sum(axis=1)
+    new_cols["zone_low_count"]  = (ball_arr < z1).sum(axis=1)
+    new_cols["zone_mid_count"]  = ((ball_arr >= z1) & (ball_arr < z2)).sum(axis=1)
+    new_cols["zone_high_count"] = (ball_arr >= z2).sum(axis=1)
 
     # === 16. Draw sequence number ===
     # Normalized 0→1 index over full history; lets the model detect
     # long-term drift (e.g. rule changes that shift number distributions).
-    data["draw_index"] = np.arange(n) / max(n - 1, 1)
-
-    # Defragment before adding sections 17-19 to silence PerformanceWarning.
-    # By this point the DataFrame has many columns from prior sections and
-    # pandas stores them in separate internal blocks; copying consolidates them.
-    data = data.copy()
+    new_cols["draw_index"] = np.arange(n) / max(n - 1, 1)
 
     # === 17. Decaying frequency (global + positional, online — leak-free) ===
     # === 19. Decaying co-occurrence (online — leak-free) ===
@@ -256,7 +283,6 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     decayed_pos_running = np.zeros((n_balls, range_max))
     decayed_cooc_running = np.zeros((range_max, range_max))
 
-    new_cols: dict = {}
     decayed_global_vals = {col: np.zeros(n) for col in ball_cols_main}
     decayed_pos_vals = {col: np.zeros(n) for col in ball_cols_main}
     decayed_cooc_vals = {col: np.zeros(n) for col in ball_cols_main}
@@ -289,10 +315,10 @@ def engineer_features(data: pd.DataFrame, config: dict, log) -> pd.DataFrame:
     expected_in_window = (20 * n_balls) / range_width
     for col in ball_cols_main:
         new_cols[f"{col}_momentum"] = (
-            data[f"{col}_recent_count_20"].values / max(expected_in_window, 1e-6) - 1.0
+            new_cols[f"{col}_recent_count_20"] / max(expected_in_window, 1e-6) - 1.0
         )
 
-    # Batch-assign all new columns in one concat to avoid repeated fragmentation
+    # Single batched assignment: one contiguous block, no fragmentation.
     data = pd.concat([data, pd.DataFrame(new_cols, index=data.index)], axis=1)
 
     return data

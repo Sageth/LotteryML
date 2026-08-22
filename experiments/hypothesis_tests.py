@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.config.loader import load_config, evaluate_config
 from lib.data.io import load_data
 
-GAMEDIR = "NJ_Pick6"
+GAMEDIR = sys.argv[1] if len(sys.argv) > 1 else "NJ_Pick6"
 N_PERMUTATIONS = 10_000
 RNG_SEED = 42
 rng = np.random.default_rng(RNG_SEED)

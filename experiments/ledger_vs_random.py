@@ -171,7 +171,7 @@ def analyse(gamedir):
     pred_dir = os.path.join(gamedir, "predictions")
     files = sorted(f for f in os.listdir(pred_dir) if f.endswith(".json"))
 
-    scored, no_draw, leak = [], 0, 0
+    scored, no_draw, leak, unpopular = [], 0, 0, 0
     for fn in files:
         date = fn[:-5]
         if date not in actual_by_date:
@@ -183,6 +183,14 @@ def analyse(gamedir):
             continue
         with open(path) as fh:
             runs = json.load(fh)
+        # Unpopularity-mode files are a different generation process --
+        # uniform sampling selected for expected payout, with no predictive
+        # claim. Scoring them against a chance null is meaningless, and mixing
+        # them into the model's accuracy series would corrupt it.
+        if any(r.get("method") == "unpopularity" for r in runs):
+            unpopular += 1
+            continue
+
         tickets = [r["predicted"] for r in runs if r.get("predicted")]
         if not tickets:
             continue
@@ -210,6 +218,7 @@ def analyse(gamedir):
     print(f"prediction files                 : {len(files)}")
     print(f"  no matching draw yet           : {no_draw}")
     print(f"  DROPPED, not provably pre-draw : {leak}")
+    print(f"  skipped, unpopularity mode     : {unpopular}")
     print(f"  scored, leak-proof             : {len(scored)}"
           f"  [{scored[0]['date']} -> {scored[-1]['date']}]  {n_tix} tickets")
     print(f"\nOBSERVED  mean best-of-N hits    : {obs_best:.4f}")

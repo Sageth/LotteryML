@@ -99,3 +99,38 @@ def test_selection_never_restricts_the_reachable_ball_range():
     )
     used = {b for _, t in tickets for b in t}
     assert min(used) <= 12 and max(used) == 45
+
+
+def test_unpopularity_files_are_excluded_from_live_accuracy(tmp_path, caplog):
+    """These tickets make no predictive claim; scoring them would corrupt the
+    model's accuracy series."""
+    import json
+    import logging
+
+    from lib.models.accuracy import report_live_accuracy
+
+    pred = tmp_path / "2026-08-22.json"
+    pred.write_text(json.dumps([
+        {"run": 1, "date": "2026-08-22", "predicted": [1, 2, 3, 4, 5],
+         "method": "unpopularity"}
+    ]))
+    df = pd.DataFrame([["2026-08-22", 1, 2, 3, 4, 5]],
+                      columns=["Date"] + [f"Ball{i}" for i in range(1, 6)])
+    log = logging.getLogger("t")
+
+    # A perfect match would otherwise score 5/5.
+    assert report_live_accuracy(str(tmp_path), log, CONFIG, df, str(pred)) is None
+
+
+def test_model_prediction_files_are_still_scored(tmp_path):
+    import json
+    import logging
+
+    from lib.models.accuracy import report_live_accuracy
+
+    pred = tmp_path / "2026-08-22.json"
+    pred.write_text(json.dumps([{"run": 1, "predicted": [1, 2, 3, 9, 10]}]))
+    df = pd.DataFrame([["2026-08-22", 1, 2, 3, 4, 5]],
+                      columns=["Date"] + [f"Ball{i}" for i in range(1, 6)])
+    result = report_live_accuracy(str(tmp_path), logging.getLogger("t"), CONFIG, df, str(pred))
+    assert result == ("2026-08-22", 3, 5)

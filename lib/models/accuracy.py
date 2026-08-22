@@ -134,6 +134,13 @@ def report_live_accuracy(gamedir, log, config, df, pred_file):
     with open(pred_file) as f:
         predictions = json.load(f)
 
+    # Unpopularity-mode files select for expected payout, not for hitting the
+    # draw. They make no predictive claim, so scoring them here would mix two
+    # different generation processes into one accuracy series.
+    if any(p.get("method") == "unpopularity" for p in predictions):
+        log.info(f"{date_str}: unpopularity-mode predictions, not scored for accuracy.")
+        return None
+
     best_match = max(
         (_count_hits(run.get("predicted", []), actual) for run in predictions),
         default=0

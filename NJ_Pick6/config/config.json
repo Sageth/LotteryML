@@ -15,12 +15,13 @@
   "train_ratio": 0.8,
   "mean_allowance": 0.05,
   "mode_allowance": 0.1,
-  "hot_hand_or": 1.039,
+  "hot_hand_or": 1.0,
   "hot_hand_window": 10,
   "draw_days": [
     "Monday",
     "Thursday",
     "Saturday"
   ],
-  "fetch_game_name": "Pick 6"
+  "fetch_game_name": "Pick 6",
+  "matrix_start": "2022-04-07"
 }

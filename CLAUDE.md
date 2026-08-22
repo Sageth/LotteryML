@@ -24,6 +24,7 @@ python lottery.py <GAMEDIRECTORY>
 - `--automerge` — Commit and merge prediction exports to GitHub (requires `.env`)
 - `--draws N` — Predict the next N scheduled draw dates (default 1); one prediction file per draw date
 - `--update-data` — Fetch the latest winning numbers from the NJ Lottery API (`lib/data/fetch.py`) and append them to the game's source CSV before running
+- `--unpopular` — Select tickets for expected *payout* rather than predicted numbers. Bypasses model training entirely: samples uniformly over the ticket space and keeps combinations other players avoid (balls above 31, no consecutive runs or arithmetic progressions, not a past winning combination). **Does not change the odds of winning** — it raises the expected share of a pari-mutuel prize by reducing the number of co-winners. See `lib/models/unpopularity.py`.
 
 **Run all tests:**
 ```shell
@@ -71,6 +72,8 @@ Each game (e.g., `NJ_Pick6`, `Powerball`, `Megamillions`, `NJ_Cash4Life`, `NJ_Ca
 
 ### Config fields
 `game_balls` is a list like `[1,2,3,4,5,6]` (not ball values — these are ball position indices used to generate column names `Ball1..Ball6`). Games with an extra ball (PowerBall, MegaBall, CashBall) set `game_has_extra: true` and define `game_extra_col`, `game_balls_extra_low/high`.
+
+`matrix_start` (ISO date, optional but set for every game that needs it) truncates the source data to the first draw of the game's **current ball matrix**. Games change their matrix periodically (NJ Cash 5 has run as 5/38, 5/40, 5/43 and now 5/45 since 2020-06-29), and older draws are samples from a different distribution — formerly-impossible balls look permanently cold and the sum statistics that drive the prediction filter centre on the wrong value. `load_data` applies the cutoff and also drops exact duplicate rows. **Update this whenever a game changes its matrix.**
 
 Optional config fields: `lag_window` (default 5), `entropy_windows` (default [10,25,50]), `entropy_low_threshold`, `entropy_high_threshold`, `regime_temperatures` (default {0:0.8, 1:1.2, 2:1.6}), `input_sample_window` (default 10), `test_prediction_runs` (default 10), `max_prediction_retries` (default 20), `min_confidence` (default 0.01), `include_extra_in_sum`, `prediction_smoothing` (default 0.3 — uniform mixture weight to prevent mode collapse), `calibration_ratio` (default 0.15 — fraction of train data held out for temperature calibration), `freq_decay` (default 0.97 — exponential decay for recency-weighted frequency features), `accuracy_allowance` (default 0.0 — min accuracy delta vs. baseline to accept a retrained model), `draw_days` (list of weekday names the game draws on, e.g. `["Monday", "Thursday", "Saturday"]`; used by `lib/data/schedule.py` to pick prediction target dates — absent means daily), `fetch_game_name` (the game's name in the NJ Lottery API, e.g. `"Pick 6"`; required for `--update-data`).
 

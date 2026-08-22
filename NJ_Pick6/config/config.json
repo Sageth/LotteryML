@@ -22,5 +22,6 @@
     "Thursday",
     "Saturday"
   ],
-  "fetch_game_name": "Pick 6"
+  "fetch_game_name": "Pick 6",
+  "matrix_start": "2022-04-07"
 }

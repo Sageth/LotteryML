@@ -22,5 +22,6 @@
     "Tuesday",
     "Friday"
   ],
-  "fetch_game_name": "Mega Millions"
+  "fetch_game_name": "Mega Millions",
+  "matrix_start": "2017-10-31"
 }

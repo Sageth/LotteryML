@@ -23,5 +23,6 @@
     "Wednesday",
     "Saturday"
   ],
-  "fetch_game_name": "Powerball"
+  "fetch_game_name": "Powerball",
+  "matrix_start": "2015-10-07"
 }

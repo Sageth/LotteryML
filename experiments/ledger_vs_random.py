@@ -52,23 +52,23 @@ def git_add_time(path):
     return pd.to_datetime(out) if out else None
 
 
-def is_provably_prior(path, draw_date):
+def is_provably_prior(path, draw_date, cutoff_hour=20):
     """
-    True if the file was committed before its draw could have happened.
+    True if the file was committed before its draw could possibly have happened.
 
-    Draws are in the evening; anything committed on or before the draw date is
-    prior to the draw. A file committed after its named date cannot be trusted
-    as out-of-sample and is dropped.
+    All five games draw in the evening (the earliest is ~21:00 ET), so a commit
+    landing before 20:00 ET on the draw date is unambiguously pre-draw. Using a
+    whole-day comparison would admit a file committed at 23:50 on draw day,
+    which is *after* a 22:57 draw -- that gap is the whole point of the check,
+    so the comparison is on timestamps, not dates.
     """
     t = git_add_time(path)
     if t is None:
         return False
-    return t.tz_localize(None).normalize() <= pd.Timestamp(draw_date).normalize()
+    t = t.tz_convert("America/New_York").tz_localize(None)
+    return t < pd.Timestamp(draw_date) + pd.Timedelta(hours=cutoff_hour)
 
 
-# ------------------------------------------------------------
-# Scoring
-# ------------------------------------------------------------
 def _random_subsets(m, lo, hi, k):
     """m uniform k-subsets of [lo, hi], vectorised."""
     pool_n = hi - lo + 1

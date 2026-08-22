@@ -20,6 +20,7 @@ from lib.data.features import engineer_features
 from lib.data.fetch import fetch_new_draws
 from lib.data.github import GitHubAutoMerge
 from lib.data.io import load_data
+from lib.models.unpopularity import generate_unpopular_tickets, past_draw_set
 from lib.data.normalize import normalize_features
 from lib.data.schedule import next_draw_dates, prediction_start_date
 from lib.models.accuracy import report_live_accuracy_all, evaluate_model_accuracy
@@ -105,6 +106,12 @@ def run_lottery(gamedir, args):
             run_automerge()
         return
 
+    if args.unpopular:
+        run_unpopular(gamedir, config, data, log, target_dates, args)
+        if args.automerge and not args.dry_run:
+            run_automerge()
+        return
+
     log.info("Engineering features (including entropy + regime)...")
     data = engineer_features(data, config, log)
 
@@ -141,6 +148,53 @@ def run_lottery(gamedir, args):
 
 
 # ------------------------------------------------------------
+# Unpopularity mode: maximise expected payout, not hit probability
+# ------------------------------------------------------------
+def run_unpopular(gamedir, config, data, log, target_dates, args):
+    """
+    Emit tickets chosen for how few people share them, not for what they are.
+
+    Deliberately skips the models. Across 445 leak-proof live draws the
+    ensemble is indistinguishable from chance, so uniform sampling loses
+    nothing, and the sum filter it would otherwise inherit is EV-negative --
+    mid-range sums are where human pickers cluster.
+    """
+    n_runs = config.get("test_prediction_runs", 10)
+    past = past_draw_set(data, config)
+    log.info(f"Unpopularity mode: sampling uniformly, selecting against "
+             f"{len(past)} previously-drawn combinations.")
+    log.info("This does NOT change the odds of winning, only the expected "
+             "share of a pari-mutuel prize.")
+
+    for target_date in target_dates:
+        tickets = generate_unpopular_tickets(config, n_runs, past_draws=past)
+        predictions = [
+            {
+                "run": i + 1,
+                "date": target_date,
+                "predicted": t,
+                "unpopularity_score": round(score, 4),
+                "predicted_sum": sum(t),
+                "method": "unpopularity",
+                "config": {
+                    "game_balls": config["game_balls"],
+                    "game_has_extra": config.get("game_has_extra", False),
+                },
+            }
+            for i, (score, t) in enumerate(tickets)
+        ]
+        for p in predictions:
+            log.info(f"[Run {p['run']}] score={p['unpopularity_score']:.3f} "
+                     f"sum={p['predicted_sum']:3d} {p['predicted']}")
+
+        if args.dry_run:
+            log.info("Dry run enabled - not exporting predictions.")
+            continue
+        log.info(f"Exporting predictions for {target_date}...")
+        export_predictions(predictions, gamedir, log, date_str=target_date)
+
+
+# ------------------------------------------------------------
 # CLI
 # ------------------------------------------------------------
 def main():
@@ -163,6 +217,10 @@ def main():
                         help="Number of upcoming draw dates to predict (one prediction file per draw date)")
     parser.add_argument("--update-data", action="store_true",
                         help="Fetch the latest winning numbers from the NJ Lottery API and append to source CSV")
+    parser.add_argument("--unpopular", action="store_true",
+                        help="Select tickets for expected payout instead of predicted numbers: sample uniformly "
+                             "and keep combinations other players avoid. Does not change the odds of winning; "
+                             "raises the expected share of a pari-mutuel prize. Bypasses model training.")
 
     args = parser.parse_args()
     run_lottery(args.gamedir, args)

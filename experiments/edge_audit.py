@@ -163,8 +163,10 @@ def t5_pair_dispersion(matrix, n_balls_drawn):
             "detail": f"expected {expected:.1f}/pair is too small for chi-square",
         }
     chi2 = (((counts - expected) ** 2) / expected).sum()
-    # Pair counts are not independent; the effective dof is well below n_pairs-1.
-    # Using n_pairs-1 makes the test conservative, which is the safe direction here.
+    # Pair counts are not independent, so n_pairs-1 overstates the true dof. In
+    # simulation this turns out to be close to harmless: on fair 5/45 data the
+    # null p-values come out approximately uniform (see validate_detection.py).
+    # Treat T5 as roughly calibrated rather than provably conservative.
     dof = n_pairs - 1
     return {
         "name": "T5 pair co-occurrence",

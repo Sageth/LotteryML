@@ -20,10 +20,17 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from edge_audit import _indicator_matrix, holm_bonferroni, t1_ball_frequency, t3_serial_repeat
+from edge_audit import (
+    _indicator_matrix,
+    holm_bonferroni,
+    t1_ball_frequency,
+    t3_serial_repeat,
+    t5_pair_dispersion,
+)
 
 SPAN, DRAWN, N_DRAWS = 45, 5, 2238
 SEED = 0
+N_T5_TRIALS = 40
 
 
 def simulate(rng, weights=None, repeat_boost=0.0):
@@ -66,6 +73,15 @@ def main():
         p = t3_serial_repeat(simulate(rng, repeat_boost=boost))["p"]
         verdict = "detected" if p < 0.05 else "missed"
         print(f"  +{boost:.0%}  p={p:.3g}  {verdict}")
+
+    print("\nT5 null calibration (its dof is approximate, so check it empirically)")
+    null_p = np.array([t5_pair_dispersion(simulate(rng), DRAWN)["p"] for _ in range(N_T5_TRIALS)])
+    false_positives = int((null_p < 0.05).sum())
+    print(f"  {N_T5_TRIALS} fair machines: mean p={null_p.mean():.3f} (uniform -> 0.50)")
+    print(
+        f"  false positives at p<0.05: {false_positives}/{N_T5_TRIALS} "
+        f"(nominal {0.05 * N_T5_TRIALS:.0f}) -> approximately calibrated"
+    )
 
     print("\nHolm-Bonferroni behaviour")
     print(f"  [.04, .30, .60]    -> {holm_bonferroni([0.04, 0.30, 0.60])}")

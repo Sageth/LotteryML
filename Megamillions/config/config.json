@@ -17,11 +17,11 @@
   "no_duplicates": true,
   "train_ratio": 0.8,
   "mean_allowance": 0.05,
-  "mode_allowance": 0.1,
+  "mode_allowance": 0.2,
   "draw_days": [
     "Tuesday",
     "Friday"
   ],
   "fetch_game_name": "Mega Millions",
-  "matrix_start": "2017-10-31"
+  "matrix_start": "2025-04-08"
 }

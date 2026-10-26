@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from lib.config.loader import load_config, evaluate_config
 from lib.data.features import engineer_features
 from lib.data.fetch import fetch_new_draws
+from lib.models.freshness import mark_trained, models_are_stale
 from lib.data.github import GitHubAutoMerge
 from lib.data.io import load_data
 from lib.models.unpopularity import generate_unpopular_tickets, past_draw_set
@@ -122,7 +123,13 @@ def run_lottery(gamedir, args):
     stats = prepare_statistics(data, config, log)
 
     log.info("Training or loading models...")
-    models, test_scores = build_models(data, config, gamedir, stats, log, force_retrain=args.force_retrain, tune=args.tune)
+    retrain = args.force_retrain
+    if args.retrain_on_new_data and not retrain and models_are_stale(gamedir, config, last_draw):
+        log.info(f"New draws since models were last trained (data through {last_draw}); retraining.")
+        retrain = True
+    models, test_scores = build_models(data, config, gamedir, stats, log, force_retrain=retrain, tune=args.tune)
+    if retrain:
+        mark_trained(gamedir, config, last_draw)
 
     for target_date in target_dates:
         log.info(f"Generating predictions for draw date {target_date}...")
@@ -205,6 +212,9 @@ def main():
 
     parser.add_argument("gamedir", help="Directory containing game configuration and source data")
     parser.add_argument("--force-retrain", action="store_true", help="Force retraining of all models")
+    parser.add_argument("--retrain-on-new-data", action="store_true",
+                        help="Retrain models only when the source data has draws newer than the last training run "
+                             "(unlike --force-retrain, keeps the existing-prediction skip)")
     parser.add_argument("--dry-run", action="store_true", help="Run pipeline but do not export predictions")
     parser.add_argument("--test-mode", action="store_true", help="Disable filtering checks for predictions")
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy evaluation (overall)")

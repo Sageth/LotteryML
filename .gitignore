@@ -13,3 +13,4 @@
 lottery-cron.sh
 **/.env
 **/.venv/
+**/models/trained_through.txt

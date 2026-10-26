@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 GIT_DIR="/home/$USER/Documents/github/LotteryML"
-VENV_DIR="$($HOME/.local/bin/pipenv --venv)/bin"
+# Run through uv so the repo's own .venv (pinned by uv.lock) is always used.
+UV_RUN=(uv run --frozen --project "$GIT_DIR" python)
 CURRENT_DAY=$(date +%A)
 SSH_AUTH_SOCK="/run/user/$(id -u)/gnupg/S.gpg-agent.ssh"
 
@@ -12,7 +13,7 @@ cd "$GIT_DIR" || exit 1
 # ----------------------------------------
 run_game() {
     local game="$1"
-    "$VENV_DIR/python" "$GIT_DIR/lottery.py" "$game" --force-retrain --automerge
+    "${UV_RUN[@]}" "$GIT_DIR/lottery.py" "$game" --force-retrain --automerge
 }
 
 # ----------------------------------------

@@ -12,3 +12,4 @@
 **/.run/
 lottery-cron.sh
 **/.env
+**/.venv/

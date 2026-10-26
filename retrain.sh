@@ -4,7 +4,8 @@
 # script will automatically use the updated models on its next run.
 
 GIT_DIR="/home/$USER/Documents/github/LotteryML"
-VENV_DIR="$($HOME/.local/bin/pipenv --venv)/bin"
+# Run through uv so the repo's own .venv (pinned by uv.lock) is always used.
+UV_RUN=(uv run --frozen --project "$GIT_DIR" python)
 
 GAMES=(
     NJ_Cash5
@@ -19,7 +20,7 @@ cd "$GIT_DIR" || exit 1
 
 for game in "${GAMES[@]}"; do
     echo "=== Retraining + tuning: $game ==="
-    "$VENV_DIR/python" "$GIT_DIR/lottery.py" "$game" --force-retrain --tune --dry-run
+    "${UV_RUN[@]}" "$GIT_DIR/lottery.py" "$game" --force-retrain --tune --dry-run
     if [ $? -ne 0 ]; then
         echo "ERROR: $game failed — skipping remaining games"
         exit 1

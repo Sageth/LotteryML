@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Setup:**
 ```shell
-pipenv sync
+uv sync
 ```
 
 **Run predictions for a game:**
 ```shell
-python lottery.py <GAMEDIRECTORY>
-# e.g., python lottery.py NJ_Pick6
+uv run python lottery.py <GAMEDIRECTORY>
+# e.g., uv run python lottery.py NJ_Pick6
 ```
 
 **CLI flags:**
@@ -28,17 +28,17 @@ python lottery.py <GAMEDIRECTORY>
 
 **Run all tests:**
 ```shell
-pipenv run pytest
+uv run pytest
 ```
 
 **Run a single test file:**
 ```shell
-pipenv run pytest tests/test_features.py
+uv run pytest tests/test_features.py
 ```
 
 **Run a single test by name:**
 ```shell
-pipenv run pytest tests/test_features.py::test_function_name
+uv run pytest tests/test_features.py::test_function_name
 ```
 
 Coverage is enforced at 85% minimum (`--cov=lib --cov-report=term`).
@@ -98,11 +98,11 @@ Before pushing a pull request, you must pass **both** checks:
 
 1. Unit tests:
 ```shell
-pipenv run pytest
+uv run pytest
 ```
 
 2. End-to-end pipeline test against real data (catches issues unit tests miss, such as rare-class edge cases, model training failures, and data-shape mismatches):
 ```shell
-python lottery.py NJ_Pick6 --dry-run --force-retrain
+uv run python lottery.py NJ_Pick6 --dry-run --force-retrain
 ```
 This must complete without errors. `--dry-run` skips writing prediction files; `--force-retrain` forces a full fresh training run so the pipeline is exercised end-to-end.

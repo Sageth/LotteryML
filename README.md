@@ -14,10 +14,10 @@ If you win anything, consider it luck, not a guarantee.
 # Setup
 
 ## 1. Create your virtual environment
-Pipenv is recommended:
+uv is recommended (it installs the Python version pinned in `.python-version` for you):
 
 ```shell
-pipenv sync
+uv sync
 ```
 
 ## 2. Create a `.env` file in the project root

@@ -1,0 +1,456 @@
+[
+  {
+    "run": 1,
+    "date": "2026-10-27",
+    "predicted": [
+      13,
+      29,
+      35,
+      28,
+      40,
+      5
+    ],
+    "confidences": [
+      0.0273,
+      0.0103,
+      0.1693,
+      0.0255,
+      0.0654,
+      0.1824
+    ],
+    "predicted_sum": 145,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 2,
+    "date": "2026-10-27",
+    "predicted": [
+      25,
+      13,
+      26,
+      32,
+      53,
+      3
+    ],
+    "confidences": [
+      0.0198,
+      0.265,
+      0.2234,
+      0.5477,
+      0.0301,
+      0.2153
+    ],
+    "predicted_sum": 149,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 3,
+    "date": "2026-10-27",
+    "predicted": [
+      18,
+      34,
+      42,
+      28,
+      30,
+      3
+    ],
+    "confidences": [
+      0.0227,
+      0.0343,
+      0.0122,
+      0.0255,
+      0.025,
+      0.2153
+    ],
+    "predicted_sum": 152,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 4,
+    "date": "2026-10-27",
+    "predicted": [
+      28,
+      13,
+      15,
+      37,
+      56,
+      5
+    ],
+    "confidences": [
+      0.0732,
+      0.265,
+      0.0111,
+      0.0293,
+      0.2395,
+      0.1824
+    ],
+    "predicted_sum": 149,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 5,
+    "date": "2026-10-27",
+    "predicted": [
+      42,
+      7,
+      6,
+      27,
+      58,
+      3
+    ],
+    "confidences": [
+      0.0215,
+      0.1483,
+      0.0125,
+      0.1392,
+      0.0352,
+      0.2153
+    ],
+    "predicted_sum": 140,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 6,
+    "date": "2026-10-27",
+    "predicted": [
+      18,
+      25,
+      31,
+      34,
+      41,
+      4
+    ],
+    "confidences": [
+      0.0227,
+      0.011,
+      0.0172,
+      0.0285,
+      0.0174,
+      0.1805
+    ],
+    "predicted_sum": 149,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 7,
+    "date": "2026-10-27",
+    "predicted": [
+      19,
+      13,
+      25,
+      32,
+      51,
+      5
+    ],
+    "confidences": [
+      0.0203,
+      0.265,
+      0.0119,
+      0.5477,
+      0.0416,
+      0.1824
+    ],
+    "predicted_sum": 140,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 8,
+    "date": "2026-10-27",
+    "predicted": [
+      27,
+      2,
+      26,
+      34,
+      56,
+      3
+    ],
+    "confidences": [
+      0.0195,
+      0.0106,
+      0.2234,
+      0.0285,
+      0.2395,
+      0.2153
+    ],
+    "predicted_sum": 145,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 9,
+    "date": "2026-10-27",
+    "predicted": [
+      3,
+      25,
+      40,
+      32,
+      43,
+      3
+    ],
+    "confidences": [
+      0.2416,
+      0.011,
+      0.0348,
+      0.5477,
+      0.0117,
+      0.2153
+    ],
+    "predicted_sum": 143,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": 10,
+    "date": "2026-10-27",
+    "predicted": [
+      1,
+      27,
+      35,
+      32,
+      58,
+      4
+    ],
+    "confidences": [
+      0.0567,
+      0.0111,
+      0.1693,
+      0.5477,
+      0.0352,
+      0.1805
+    ],
+    "predicted_sum": 153,
+    "regime": 0,
+    "temperature": 1.661376324527666,
+    "mean_sum": 146.36,
+    "mode_sum": 142,
+    "stddev": 34.99,
+    "test_scores": {
+      "1": 0.1,
+      "2": 0.0,
+      "3": 0.02,
+      "4": 0.02,
+      "5": 0.16,
+      "extra": 0.16
+    },
+    "config": {
+      "game_balls": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "game_has_extra": true
+    }
+  },
+  {
+    "run": "consensus",
+    "date": "2026-10-27",
+    "predicted": [
+      18,
+      13,
+      35,
+      32,
+      56,
+      3
+    ],
+    "method": "majority_vote",
+    "based_on_runs": 10
+  }
+]
